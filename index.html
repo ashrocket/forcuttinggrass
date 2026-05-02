@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GRASS CUTTER 2003</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      overflow: hidden;
+      font-family: 'Courier New', monospace;
+    }
+    canvas { display: block; image-rendering: pixelated; }
+
+    #spotify-overlay {
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(ellipse at center, #0d2b0d 0%, #000 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 999;
+      color: #fff;
+    }
+    #spotify-overlay.hidden { display: none; }
+
+    .overlay-title {
+      font-size: 60px;
+      font-weight: bold;
+      color: #ffcc00;
+      text-shadow: 4px 4px 0 #000, -1px -1px 0 #000;
+      letter-spacing: 4px;
+      margin-bottom: 8px;
+    }
+    .overlay-sub {
+      font-size: 16px;
+      color: #8bc44a;
+      letter-spacing: 3px;
+      margin-bottom: 40px;
+    }
+    .overlay-box {
+      background: rgba(0,0,0,0.7);
+      border: 3px solid #1DB954;
+      padding: 32px 48px;
+      text-align: center;
+      max-width: 480px;
+    }
+    .overlay-box p {
+      font-size: 15px;
+      line-height: 1.7;
+      color: #ccc;
+      margin-bottom: 28px;
+    }
+    .overlay-box p strong { color: #1DB954; }
+    .btn-spotify {
+      display: block;
+      background: #1DB954;
+      color: #000;
+      border: 3px solid #000;
+      box-shadow: 4px 4px 0 #000;
+      padding: 14px 36px;
+      font-size: 18px;
+      font-family: 'Courier New', monospace;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      cursor: pointer;
+      width: 100%;
+      transition: transform 0.1s, box-shadow 0.1s;
+      margin-bottom: 12px;
+    }
+    .btn-spotify:hover {
+      transform: translate(-2px, -2px);
+      box-shadow: 6px 6px 0 #000;
+    }
+    .btn-skip {
+      background: transparent;
+      color: #555;
+      border: 2px solid #333;
+      padding: 10px 24px;
+      font-size: 13px;
+      font-family: 'Courier New', monospace;
+      cursor: pointer;
+      width: 100%;
+      transition: color 0.2s;
+    }
+    .btn-skip:hover { color: #888; }
+    .overlay-note {
+      margin-top: 24px;
+      font-size: 11px;
+      color: #444;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="spotify-overlay">
+    <div class="overlay-title">GRASS CUTTER</div>
+    <div class="overlay-sub">✦ 2003 EDITION ✦</div>
+    <div class="overlay-box">
+      <p>
+        Connect Spotify to blast <strong>The Goon Song</strong>
+        while you mow.<br>Requires <strong>Spotify Premium</strong>.
+      </p>
+      <button class="btn-spotify" onclick="SpotifyAuth.login()">
+        ● Connect Spotify &amp; Play
+      </button>
+      <button class="btn-skip" onclick="skipSpotify()">
+        Play without music
+      </button>
+    </div>
+    <div class="overlay-note">
+      Need a Client ID? Set it in config.js after registering at developer.spotify.com
+    </div>
+  </div>
+
+  <div id="game-container"></div>
+
+  <script>
+    window.onSpotifyWebPlaybackSDKReady = function () {
+      window._sdkReady = true;
+      if (window._onSDKReady) window._onSDKReady();
+    };
+    function skipSpotify() {
+      document.getElementById('spotify-overlay').classList.add('hidden');
+      window._gameReady = true;
+    }
+  </script>
+
+  <script src="https://sdk.scdn.co/spotify-player.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
+  <script src="config.js"></script>
+  <script src="js/spotify.js"></script>
+  <script src="js/game.js"></script>
+</body>
+</html>

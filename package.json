@@ -1,0 +1,9 @@
+{
+  "name": "grass-cutter-2003",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev":    "npx serve . -p 8080 --no-clipboard",
+    "deploy": "npx wrangler pages deploy . --project-name forcuttinggrass-goon --branch main"
+  }
+}
