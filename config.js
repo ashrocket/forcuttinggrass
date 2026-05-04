@@ -10,7 +10,7 @@
 const CONFIG = {
   spotifyClientId:   'aa16f7f72c04485fb93d86d2f7ee33d1',
   spotifyRedirectUri: window.location.hostname === 'localhost'
-    ? 'http://localhost:8080'
-    : 'https://forcuttinggrass.goon.bandmusicgames.party',
+    ? 'https://localhost:8080/callback'
+    : 'https://forcuttinggrass.goon.bandmusicgames.party/callback',
   trackUri: 'spotify:track:6EJAb3oTjDFwrt1dpIJPbr',
 };

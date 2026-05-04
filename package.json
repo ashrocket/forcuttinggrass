@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev":    "npx serve . -p 8080 --no-clipboard",
+    "dev":    "npx --yes vite --port 8080 --https",
     "deploy": "npx wrangler pages deploy . --project-name forcuttinggrass-goon --branch main"
   }
 }

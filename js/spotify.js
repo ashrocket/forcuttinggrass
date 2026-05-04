@@ -140,20 +140,6 @@ const SpotifyPlayer = {
 // ─── Bootstrap on page load ───────────────────────────────────────
 
 (async function bootstrap() {
-  const params = new URLSearchParams(window.location.search);
-
-  if (params.has('code')) {
-    const ok = await SpotifyAuth.handleCallback(params.get('code'));
-    window.history.replaceState({}, '', window.location.pathname);
-    if (ok) {
-      document.getElementById('spotify-overlay').classList.add('hidden');
-      await SpotifyPlayer.init();
-      window._spotifyConnected = true;
-      window._gameReady = true;
-      return;
-    }
-  }
-
   if (SpotifyAuth.hasToken()) {
     document.getElementById('spotify-overlay').classList.add('hidden');
     await SpotifyPlayer.init();
