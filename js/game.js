@@ -3,17 +3,17 @@
 // ═══════════════════════════════════════════════════════════════════
 
 // ─── Layout constants ────────────────────────────────────────────
-const CW      = 800;   // canvas width
-const CH      = 600;   // canvas height
+const CW      = 800;
+const CH      = 600;
 const TILE    = 32;
 const GRID_W  = 25;
 const GRID_H  = 15;
-const TITLE_H = 40;    // top title bar
+const TITLE_H = 40;
 const LAWN_Y  = TITLE_H;
-const LAWN_W  = GRID_W * TILE;   // 800
-const LAWN_H  = GRID_H * TILE;   // 480
-const HUD_Y   = LAWN_Y + LAWN_H; // 520
-const HUD_H   = CH - HUD_Y;      // 80
+const LAWN_W  = GRID_W * TILE;
+const LAWN_H  = GRID_H * TILE;
+const HUD_Y   = LAWN_Y + LAWN_H;
+const HUD_H   = CH - HUD_Y;
 
 // ─── Tile types ──────────────────────────────────────────────────
 const T_TALL  = 0;
@@ -31,6 +31,7 @@ const C_WHEEL       = 0x222222;
 const C_GAS_CAN     = 0xdd2222;
 const C_CRICKET     = 0x228b22;
 const C_HUD_BG      = 0x0d1a0d;
+const C_DOG         = 0xc8a060;
 
 // ─── Level configs ────────────────────────────────────────────────
 const LEVELS = [
@@ -38,35 +39,35 @@ const LEVELS = [
     n: 1, title: 'LEVEL 1', sub: 'FRESH CUT',
     desc: 'Mow the lawn. Simple.',
     gasMax: 600, gasDrain: 0.10,
-    cans: 0, stumps: 0, crickets: 0, cricketMs: 0,
+    cans: 0, stumps: 0, crickets: 0, dogs: 0, cricketMs: 0,
     win: 0.80,
   },
   {
     n: 2, title: 'LEVEL 2', sub: 'RUNNING ON FUMES',
     desc: 'Gas runs out — find the gas can!',
     gasMax: 200, gasDrain: 0.18,
-    cans: 1, stumps: 0, crickets: 0, cricketMs: 0,
+    cans: 1, stumps: 0, crickets: 0, dogs: 0, cricketMs: 0,
     win: 0.80,
   },
   {
     n: 3, title: 'LEVEL 3', sub: 'STUMP TROUBLE',
     desc: 'Hold SPACE near stumps to dig them up.',
     gasMax: 180, gasDrain: 0.20,
-    cans: 1, stumps: 2, crickets: 0, cricketMs: 0,
+    cans: 1, stumps: 2, crickets: 0, dogs: 0, cricketMs: 0,
     win: 0.80,
   },
   {
     n: 4, title: 'LEVEL 4', sub: 'CRICKET SEASON',
-    desc: 'Crickets hop around. Hit one = lose gas!',
+    desc: 'Crickets hop around. Hit one = lose gas!  Watch the dog!',
     gasMax: 160, gasDrain: 0.22,
-    cans: 1, stumps: 2, crickets: 2, cricketMs: 1200,
+    cans: 1, stumps: 2, crickets: 2, dogs: 1, cricketMs: 1200,
     win: 0.85,
   },
   {
     n: 5, title: 'LEVEL 5', sub: 'THE FINAL YARD',
     desc: 'Everything at once. Good luck.',
     gasMax: 140, gasDrain: 0.25,
-    cans: 2, stumps: 3, crickets: 3, cricketMs: 750,
+    cans: 2, stumps: 3, crickets: 3, dogs: 1, cricketMs: 750,
     win: 0.90,
   },
 ];
@@ -102,14 +103,20 @@ const SFX = {
     setTimeout(() => { try { m.osc.stop(); } catch (_) {} }, 400);
   },
 
-  pickup()       { this._seq([523,659,784],     0.14, 75,  'sine'); },
-  splat()        { this._seq([380,240,140],     0.22, 90,  'square'); },
-  dig()          { this._beep(130, 0.07, 'square'); },
-  levelDone()    { this._seq([523,659,784,1047],0.28, 140, 'sine'); },
-  gameOver()     { this._seq([350,250,160,90],  0.36, 180, 'sawtooth'); },
-  sputter()      { this._seq([120,100,80,60],   0.3,  120, 'sawtooth'); },
+  pickup()    { this._seq([523, 659, 784],      0.14, 75,  'sine'); },
+  splat()     { this._seq([380, 240, 140],      0.22, 90,  'square'); },
+  dig()       { this._beep(130, 0.07, 'square'); },
+  levelDone() { this._seq([523, 659, 784, 1047], 0.28, 140, 'sine'); },
+  gameOver()  { this._seq([350, 250, 160, 90],   0.36, 180, 'sawtooth'); },
+  sputter()   { this._seq([120, 100, 80, 60],    0.3,  120, 'sawtooth'); },
+  bark()      { this._beep(200, 0.12, 'square'); },
 
-  _seq(fs, d, gap, t) { fs.forEach((f,i) => setTimeout(() => this._beep(f,d,t), i*gap)); },
+  combo(n) {
+    const tier = n >= 10 ? [784, 1047, 1319] : n >= 5 ? [659, 784, 1047] : [523, 659, 784];
+    this._seq(tier, 0.10, 60, 'sine');
+  },
+
+  _seq(fs, d, gap, t) { fs.forEach((f, i) => setTimeout(() => this._beep(f, d, t), i * gap)); },
 
   _beep(f, d, t) {
     if (!this._ctx) return;
@@ -159,7 +166,8 @@ class MenuScene extends Phaser.Scene {
   constructor() { super({ key: 'Menu' }); }
 
   create() {
-    // Background lawn grid
+    window._totalScore = 0;
+
     const bg = this.add.graphics();
     bg.fillStyle(C_GRASS_TALL);
     bg.fillRect(0, 0, CW, CH);
@@ -167,49 +175,45 @@ class MenuScene extends Phaser.Scene {
     for (let x = 0; x <= CW; x += TILE) bg.lineBetween(x, 0, x, CH);
     for (let y = 0; y <= CH; y += TILE) bg.lineBetween(0, y, CW, y);
 
-    // Decorative blade blobs
     bg.fillStyle(C_GRASS_BLADE);
     for (let r = 0; r < GRID_H; r++) {
       for (let c = 0; c < GRID_W; c++) {
         const x = c * TILE, y = r * TILE;
-        bg.fillTriangle(x+4,y+TILE, x+8,y+10, x+12,y+TILE);
-        bg.fillTriangle(x+18,y+TILE, x+22,y+8, x+26,y+TILE);
+        bg.fillTriangle(x + 4, y + TILE, x + 8,  y + 10, x + 12, y + TILE);
+        bg.fillTriangle(x + 18, y + TILE, x + 22, y + 8,  x + 26, y + TILE);
       }
     }
 
-    // Title panel
-    const panel = this.add.rectangle(CW/2, CH/2 - 70, 540, 220, 0x000000, 0.88);
+    const panel = this.add.rectangle(CW / 2, CH / 2 - 70, 540, 220, 0x000000, 0.88);
     panel.setStrokeStyle(4, C_MOWER);
 
-    this.add.text(CW/2, CH/2 - 170, 'GRASS CUTTER', {
+    this.add.text(CW / 2, CH / 2 - 170, 'GRASS CUTTER', {
       fontSize: '58px', fill: '#ffcc00', fontFamily: 'Courier New',
       fontStyle: 'bold', stroke: '#000000', strokeThickness: 7,
     }).setOrigin(0.5);
 
-    this.add.text(CW/2, CH/2 - 110, '✦ 2003 EDITION ✦', {
+    this.add.text(CW / 2, CH / 2 - 110, '✦ 2003 EDITION ✦', {
       fontSize: '18px', fill: '#ffffff', fontFamily: 'Courier New',
     }).setOrigin(0.5);
 
     const spStatus = window._spotifyConnected ? '● SPOTIFY CONNECTED' : '○ NO SPOTIFY';
     const spColor  = window._spotifyConnected ? '#1DB954' : '#666';
-    this.add.text(CW/2, CH/2 - 80, `♫  THE GOON SONG  —  ${spStatus}`, {
+    this.add.text(CW / 2, CH / 2 - 80, `♫  THE GOON SONG  —  ${spStatus}`, {
       fontSize: '13px', fill: spColor, fontFamily: 'Courier New',
     }).setOrigin(0.5);
 
-    // Blink "press start"
-    const go = this.add.text(CW/2, CH/2 - 40, 'CLICK OR PRESS ENTER TO START', {
+    const go = this.add.text(CW / 2, CH / 2 - 40, 'CLICK OR PRESS ENTER TO START', {
       fontSize: '20px', fill: '#fff', fontFamily: 'Courier New', fontStyle: 'bold',
     }).setOrigin(0.5);
     this.tweens.add({ targets: go, alpha: 0.1, duration: 550, yoyo: true, repeat: -1 });
 
-    // Level select
-    this.add.text(CW/2, CH/2 + 20, 'SELECT LEVEL', {
+    this.add.text(CW / 2, CH / 2 + 20, 'SELECT LEVEL', {
       fontSize: '13px', fill: '#aaa', fontFamily: 'Courier New',
     }).setOrigin(0.5);
 
     for (let i = 0; i < 5; i++) {
-      const bx = CW/2 - 100 + i * 50;
-      const by = CH/2 + 55;
+      const bx = CW / 2 - 100 + i * 50;
+      const by = CH / 2 + 55;
       const box = this.add.rectangle(bx, by, 40, 40, 0x111111)
         .setStrokeStyle(2, C_MOWER)
         .setInteractive({ useHandCursor: true });
@@ -221,7 +225,6 @@ class MenuScene extends Phaser.Scene {
       box.on('pointerdown', () => this._start(i + 1));
     }
 
-    // Animated menu mower scrolling across
     this._menuMower = this._makeMiniMower(-64, CH / 2 + 110);
     this.tweens.add({
       targets: this._menuMower,
@@ -232,7 +235,7 @@ class MenuScene extends Phaser.Scene {
     this.input.keyboard.on('keydown-ENTER', () => this._start(1));
     this.input.keyboard.on('keydown-SPACE', () => this._start(1));
     this.input.on('pointerdown', (ptr) => {
-      if (ptr.y < CH/2 + 30 || ptr.y > CH/2 + 80) this._start(1);
+      if (ptr.y < CH / 2 + 30 || ptr.y > CH / 2 + 80) this._start(1);
     });
   }
 
@@ -248,11 +251,11 @@ class MenuScene extends Phaser.Scene {
   _makeMiniMower(x, y) {
     const c = this.add.container(x, y).setDepth(10);
     const g = this.add.graphics();
-    g.fillStyle(C_MOWER);    g.fillRect(-18, -12, 36, 24);
-    g.lineStyle(3, 0x000000); g.strokeRect(-18, -12, 36, 24);
+    g.fillStyle(C_MOWER);        g.fillRect(-18, -12, 36, 24);
+    g.lineStyle(3, 0x000000);    g.strokeRect(-18, -12, 36, 24);
     g.fillStyle(C_MOWER_STRIPE); g.fillRect(-18, -4, 36, 8);
     g.fillStyle(C_WHEEL);
-    [[-12,-8],[12,-8],[-12,8],[12,8]].forEach(([wx,wy]) => g.fillCircle(wx,wy,5));
+    [[-12, -8], [12, -8], [-12, 8], [12, 8]].forEach(([wx, wy]) => g.fillCircle(wx, wy, 5));
     c.add(g);
     return c;
   }
@@ -266,54 +269,60 @@ class GameScene extends Phaser.Scene {
 
   // ── init ────────────────────────────────────────────────────────
   init(data) {
-    this.lvlNum   = data.level || 1;
-    this.cfg      = LEVELS[this.lvlNum - 1];
-    this.gas      = this.cfg.gasMax;
-    this.cutCount = 0;
-    this.state    = 'playing'; // playing | sputtering | over | won
-    this.sputter  = 0;
-    this.lastHop  = 0;
-    this.moving   = false;
-    this.exhaustT = 0;
-    this.lawnDirty= true;
+    this.lvlNum    = data.level || 1;
+    this.cfg       = LEVELS[this.lvlNum - 1];
+    this.gas       = this.cfg.gasMax;
+    this.cutCount  = 0;
+    this.state     = 'playing';
+    this.sputter   = 0;
+    this.lastHop   = 0;
+    this.moving    = false;
+    this.exhaustT  = 0;
+    this.lawnDirty = true;
+    // Score / combo
+    this.score         = 0;
+    this.combo         = 1;
+    this.comboIdleMs   = 0;
+    this.lastComboTier = 0;
+    // Mower face
+    this.faceState  = 'normal';
+    this.faceTimer  = 0;
+    this.blinkTimer = Phaser.Math.Between(2000, 4000);
+    // Sputter shake
+    this.sputterShakeT = 0;
   }
 
   // ── create ──────────────────────────────────────────────────────
   create() {
     SFX.init();
 
-    // Build grid (all tall grass initially)
     this.grid = Array.from({ length: GRID_H }, () => new Array(GRID_W).fill(T_TALL));
 
-    // Lawn graphics (redrawn when dirty)
+    this._buildBackdrop();
     this.lawnGfx = this.add.graphics().setDepth(0);
 
-    // Place objects
     this.cans     = [];
     this.stumps   = [];
     this.crickets = [];
+    this.dogs     = [];
     this._placeCans();
     this._placeStumps();
     this._placeCrickets();
+    this._placeDogs();
 
-    // Count mowable tiles (stumps excluded)
     this.totalMow = GRID_W * GRID_H - this.stumps.length;
 
-    // Mower start position (center of lawn)
     this.mx = LAWN_W / 2;
     this.my = LAWN_Y + LAWN_H / 2;
     this._buildMower();
 
-    // HUD
     this._buildTitleBar();
     this._buildHUD();
 
-    // Splat flash overlay
-    this.flashRect = this.add.rectangle(CW/2, CH/2, CW, CH, 0xff0000, 0).setDepth(60);
+    this.flashRect = this.add.rectangle(CW / 2, CH / 2, CW, CH, 0xff0000, 0).setDepth(60);
 
-    // Input
-    this.cur   = this.input.keyboard.createCursorKeys();
-    this.wasd  = {
+    this.cur  = this.input.keyboard.createCursorKeys();
+    this.wasd = {
       up:    this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.W),
       down:  this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.S),
       left:  this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A),
@@ -326,13 +335,17 @@ class GameScene extends Phaser.Scene {
   update(time, delta) {
     if (this.state === 'over' || this.state === 'won') return;
 
-    // Blade always spins
     this.blade.angle += 16;
 
     if (this.state === 'sputtering') {
       this.sputter += delta;
       this.mowerCont.x = this.mx + Phaser.Math.Between(-2, 2);
       this.mowerCont.y = this.my + Phaser.Math.Between(-1, 1);
+      this.sputterShakeT += delta;
+      if (this.sputterShakeT > 200) {
+        this.sputterShakeT = 0;
+        this._shake(0.004, 150);
+      }
       if (this.sputter > 1400) {
         this.state = 'over';
         this.time.delayedCall(600, () => this.scene.start('GameOver', { level: this.lvlNum }));
@@ -347,7 +360,10 @@ class GameScene extends Phaser.Scene {
     this._checkStumps(delta);
     this._checkCrickets();
     this._moveCrickets(time);
+    this._moveDogs(delta);
+    this._checkDogs();
     this._exhaust(delta);
+    this._updateMowerFace(delta);
     this._updateHUD();
     this._checkWin();
 
@@ -365,12 +381,17 @@ class GameScene extends Phaser.Scene {
 
     if (dx === 0 && dy === 0) {
       if (this.moving) { SFX.stopMow(); this.moving = false; }
+      this.comboIdleMs += delta;
+      if (this.comboIdleMs > 400 && this.combo > 1) {
+        this.combo = 1;
+        this.lastComboTier = 0;
+      }
       return;
     }
 
+    this.comboIdleMs = 0;
     if (!this.moving) { SFX.startMow(); this.moving = true; }
 
-    // Rotate mower to face movement
     this.mowerCont.setRotation(Math.atan2(dy, dx) + Math.PI / 2);
 
     const spd = 155 * dt;
@@ -388,10 +409,10 @@ class GameScene extends Phaser.Scene {
   }
 
   _blocked(x, y) {
-    const h = 12; // collision half-size
+    const h = 12;
     const pts = [
-      [x-h, y-LAWN_Y-h], [x+h, y-LAWN_Y-h],
-      [x-h, y-LAWN_Y+h], [x+h, y-LAWN_Y+h],
+      [x - h, y - LAWN_Y - h], [x + h, y - LAWN_Y - h],
+      [x - h, y - LAWN_Y + h], [x + h, y - LAWN_Y + h],
     ];
     for (const [cx, cy] of pts) {
       const tx = Math.floor(cx / TILE);
@@ -411,12 +432,43 @@ class GameScene extends Phaser.Scene {
     const tyT = Math.floor((this.my - LAWN_Y - h) / TILE);
     const byT = Math.floor((this.my - LAWN_Y + h) / TILE);
 
-    for (let gy = Math.max(0, tyT); gy <= Math.min(GRID_H-1, byT); gy++) {
-      for (let gx = Math.max(0, lxT); gx <= Math.min(GRID_W-1, rxT); gx++) {
+    for (let gy = Math.max(0, tyT); gy <= Math.min(GRID_H - 1, byT); gy++) {
+      for (let gx = Math.max(0, lxT); gx <= Math.min(GRID_W - 1, rxT); gx++) {
         if (this.grid[gy][gx] === T_TALL) {
           this.grid[gy][gx] = T_CUT;
           this.cutCount++;
           this.lawnDirty = true;
+
+          // Cutting blade particles
+          const px = gx * TILE + TILE / 2;
+          const py = LAWN_Y + gy * TILE + TILE / 2;
+          const count = Phaser.Math.Between(3, 5);
+          for (let i = 0; i < count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const dist  = Phaser.Math.Between(18, 45);
+            const p = this.add.rectangle(px, py, 3, 7, C_GRASS_BLADE)
+              .setDepth(6)
+              .setRotation(angle);
+            this.tweens.add({
+              targets: p,
+              x: px + Math.cos(angle) * dist,
+              y: py + Math.sin(angle) * dist,
+              angle: p.angle + 180,
+              alpha: 0,
+              duration: Phaser.Math.Between(200, 350),
+              onComplete: () => p.destroy(),
+            });
+          }
+
+          // Combo + score
+          this.combo++;
+          this.score += 10 * this.combo;
+          const tier = this.combo >= 10 ? 3 : this.combo >= 5 ? 2 : this.combo >= 3 ? 1 : 0;
+          if (tier > this.lastComboTier) {
+            this.lastComboTier = tier;
+            SFX.combo(this.combo);
+            this._floatText(this.mx, this.my - 24, `+${this.combo}x COMBO!`, '#ffcc00', 15);
+          }
         }
       }
     }
@@ -429,8 +481,9 @@ class GameScene extends Phaser.Scene {
     if (this.gas <= 0) {
       this.gas = 0;
       if (this.state === 'playing') {
-        this.state = 'sputtering';
-        this.sputter = 0;
+        this.state       = 'sputtering';
+        this.sputter     = 0;
+        this.sputterShakeT = 0;
         SFX.stopMow();
         SFX.sputter();
         this.moving = false;
@@ -450,6 +503,7 @@ class GameScene extends Phaser.Scene {
         this.gas = this.cfg.gasMax;
         SFX.pickup();
         this._floatText(can.gfx.x, can.gfx.y, '+GAS!', '#ffcc00');
+        this._setFaceState('smile', 800);
       }
     }
   }
@@ -461,7 +515,7 @@ class GameScene extends Phaser.Scene {
 
     for (const s of this.stumps) {
       if (s.dug) continue;
-      const d = Phaser.Math.Distance.Between(this.mx, this.my, s.wx, s.wy);
+      const d    = Phaser.Math.Distance.Between(this.mx, this.my, s.wx, s.wy);
       const near = d < TILE * 2;
 
       s.barBg.setVisible(near);
@@ -471,7 +525,6 @@ class GameScene extends Phaser.Scene {
         s.prog += 0.35 * (delta / 1000);
         SFX.dig();
         s.barFill.setSize(Math.min(s.prog, 1) * 40, 8);
-
         if (s.prog >= 1) this._removeStump(s);
       }
     }
@@ -487,13 +540,15 @@ class GameScene extends Phaser.Scene {
     s.barFill.destroy();
     SFX.pickup();
     this._floatText(s.wx, s.wy, 'STUMP GONE!', '#ffcc00', 20);
-    // explosion puff
     for (let i = 0; i < 8; i++) {
       const angle = (i / 8) * Math.PI * 2;
-      const puff = this.add.circle(
+      const puff  = this.add.circle(
         s.wx + Math.cos(angle) * 20, s.wy + Math.sin(angle) * 20, 6, 0x8b4513,
       ).setDepth(30);
-      this.tweens.add({ targets: puff, alpha: 0, scaleX: 3, scaleY: 3, duration: 500, onComplete: () => puff.destroy() });
+      this.tweens.add({
+        targets: puff, alpha: 0, scaleX: 3, scaleY: 3, duration: 500,
+        onComplete: () => puff.destroy(),
+      });
     }
   }
 
@@ -510,8 +565,8 @@ class GameScene extends Phaser.Scene {
   _splat(cr) {
     cr.splatted = true;
     SFX.splat();
+    this._shake(0.006, 220);
 
-    // Draw splat graphic
     cr.gfx.clear();
     cr.gfx.fillStyle(0x00aa00, 0.85);
     for (let i = 0; i < 7; i++) {
@@ -520,17 +575,19 @@ class GameScene extends Phaser.Scene {
     }
     cr.gfx.fillCircle(0, 0, 9);
 
-    // Screen flash
+    this.flashRect.setFillStyle(0xff0000);
     this.flashRect.setAlpha(0.45);
     this.tweens.add({ targets: this.flashRect, alpha: 0, duration: 380 });
 
-    // Gas penalty
     this.gas = Math.max(0, this.gas - 30);
     this._floatText(cr.gfx.x, cr.gfx.y, '-30 GAS!', '#ff4444', 18);
+    this._setFaceState('xeyes', 600);
 
-    // Fade splat after 2s
     this.time.delayedCall(2000, () => {
-      this.tweens.add({ targets: cr.gfx, alpha: 0, duration: 500, onComplete: () => cr.gfx.destroy() });
+      this.tweens.add({
+        targets: cr.gfx, alpha: 0, duration: 500,
+        onComplete: () => cr.gfx.destroy(),
+      });
     });
   }
 
@@ -540,7 +597,7 @@ class GameScene extends Phaser.Scene {
     if (time - this.lastHop < this.cfg.cricketMs) return;
     this.lastHop = time;
 
-    const dirs = [[-1,0],[1,0],[0,-1],[0,1]];
+    const dirs = [[-1, 0], [1, 0], [0, -1], [0, 1]];
     for (const cr of this.crickets) {
       if (cr.splatted || cr.hopping) continue;
       Phaser.Utils.Array.Shuffle(dirs);
@@ -550,12 +607,11 @@ class GameScene extends Phaser.Scene {
         if (this.grid[ny][nx] === T_STUMP) continue;
 
         cr.tx = nx; cr.ty = ny;
-        const wx = nx * TILE + TILE / 2;
-        const wy = LAWN_Y + ny * TILE + TILE / 2;
+        const wx  = nx * TILE + TILE / 2;
+        const wy  = LAWN_Y + ny * TILE + TILE / 2;
         const hop = this.cfg.cricketMs;
 
         cr.hopping = true;
-        // arc up then land
         this.tweens.add({
           targets: cr.gfx, x: wx, y: wy - 14,
           duration: hop * 0.35, ease: 'Quad.easeOut',
@@ -571,6 +627,82 @@ class GameScene extends Phaser.Scene {
     }
   }
 
+  // ── dog AI ──────────────────────────────────────────────────────
+  _moveDogs(delta) {
+    if (!this.cfg.dogs) return;
+    const dt = delta / 1000;
+
+    for (const dog of this.dogs) {
+      if (dog.scattered) continue;
+      const dx   = this.mx - dog.gfx.x;
+      const dy   = this.my - dog.gfx.y;
+      const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+
+      if (dist / TILE < 4) {
+        // Chase player
+        const nx = dog.gfx.x + (dx / dist) * 80 * dt;
+        const ny = dog.gfx.y + (dy / dist) * 80 * dt;
+        dog.gfx.x = Phaser.Math.Clamp(nx, TILE, LAWN_W - TILE);
+        dog.gfx.y = Phaser.Math.Clamp(ny, LAWN_Y + TILE, LAWN_Y + LAWN_H - TILE);
+        dog.gfx.rotation = Math.atan2(dy, dx);
+        dog.chasing = true;
+      } else {
+        dog.chasing = false;
+        dog.wanderT = (dog.wanderT || 0) + delta;
+        if (dog.wanderT > 1800) {
+          dog.wanderT  = 0;
+          dog.wanderDx = Phaser.Math.Between(-1, 1);
+          dog.wanderDy = Phaser.Math.Between(-1, 1);
+        }
+        const nx = dog.gfx.x + (dog.wanderDx || 0) * 30 * dt;
+        const ny = dog.gfx.y + (dog.wanderDy || 0) * 30 * dt;
+        dog.gfx.x = Phaser.Math.Clamp(nx, TILE, LAWN_W - TILE);
+        dog.gfx.y = Phaser.Math.Clamp(ny, LAWN_Y + TILE, LAWN_Y + LAWN_H - TILE);
+      }
+    }
+  }
+
+  _checkDogs() {
+    if (!this.cfg.dogs) return;
+    for (const dog of this.dogs) {
+      if (dog.scattered) continue;
+      const d = Phaser.Math.Distance.Between(this.mx, this.my, dog.gfx.x, dog.gfx.y);
+      if (d < TILE * 0.9) this._dogScatter(dog);
+    }
+  }
+
+  _dogScatter(dog) {
+    dog.scattered = true;
+    SFX.bark();
+    this._shake(0.008, 300);
+
+    this.flashRect.setFillStyle(0xff8800);
+    this.flashRect.setAlpha(0.3);
+    this.tweens.add({
+      targets: this.flashRect, alpha: 0, duration: 400,
+      onComplete: () => this.flashRect.setFillStyle(0xff0000),
+    });
+
+    // Knock mower back 30px away from dog
+    const dx   = this.mx - dog.gfx.x;
+    const dy   = this.my - dog.gfx.y;
+    const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+    this.mx = Phaser.Math.Clamp(this.mx + (dx / dist) * 30, 18, LAWN_W - 18);
+    this.my = Phaser.Math.Clamp(this.my + (dy / dist) * 30, LAWN_Y + 18, LAWN_Y + LAWN_H - 18);
+    this.mowerCont.x = this.mx;
+    this.mowerCont.y = this.my;
+
+    this._floatText(dog.gfx.x, dog.gfx.y, 'WOOF!', '#ff8800', 22);
+    this._setFaceState('xeyes', 700);
+
+    // Dog trots off
+    const exitX = dog.gfx.x < CW / 2 ? -80 : CW + 80;
+    this.tweens.add({
+      targets: dog.gfx, x: exitX, duration: 1200, ease: 'Quad.easeIn',
+      onComplete: () => dog.gfx.setVisible(false),
+    });
+  }
+
   // ── exhaust puffs ────────────────────────────────────────────────
   _exhaust(delta) {
     if (!this.moving) return;
@@ -582,7 +714,10 @@ class GameScene extends Phaser.Scene {
       this.my + 18,
       Phaser.Math.Between(3, 6), 0x888888, 0.55,
     ).setDepth(8);
-    this.tweens.add({ targets: puff, y: puff.y - 22, alpha: 0, scaleX: 2, scaleY: 2, duration: 550, onComplete: () => puff.destroy() });
+    this.tweens.add({
+      targets: puff, y: puff.y - 22, alpha: 0, scaleX: 2, scaleY: 2,
+      duration: 550, onComplete: () => puff.destroy(),
+    });
   }
 
   // ── win / lose ───────────────────────────────────────────────────
@@ -592,13 +727,16 @@ class GameScene extends Phaser.Scene {
       this.state = 'won';
       SFX.stopMow();
       SFX.levelDone();
-      this.time.delayedCall(900, () => this.scene.start('LevelComplete', { level: this.lvlNum }));
+      window._totalScore = (window._totalScore || 0) + this.score;
+      this.time.delayedCall(900, () =>
+        this.scene.start('LevelComplete', { level: this.lvlNum, score: this.score }),
+      );
     }
   }
 
   // ── HUD update ───────────────────────────────────────────────────
   _updateHUD() {
-    const pct = this.gas / this.cfg.gasMax;
+    const pct  = this.gas / this.cfg.gasMax;
     const barW = Math.max(0, pct * 196);
     this.gasBar.setSize(barW, 14);
 
@@ -609,6 +747,9 @@ class GameScene extends Phaser.Scene {
     const cutPct = Math.floor((this.cutCount / this.totalMow) * 100);
     this.cutTxt.setText(`CUT: ${cutPct}%`);
     this.gasPctTxt.setText(`${Math.floor(pct * 100)}%`);
+    this.scoreTxt.setText(`${this.score}`);
+
+    this._updateIconRow();
   }
 
   // ── object placement ─────────────────────────────────────────────
@@ -620,7 +761,9 @@ class GameScene extends Phaser.Scene {
       const g  = this.add.graphics().setDepth(3);
       _drawCan(g);
       g.x = wx; g.y = wy;
-      const tw = this.tweens.add({ targets: g, y: wy - 7, duration: 580, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      const tw = this.tweens.add({
+        targets: g, y: wy - 7, duration: 580, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
+      });
       this.cans.push({ gfx: g, tx, ty, wx, wy, dead: false, tween: tw });
     }
   }
@@ -635,7 +778,7 @@ class GameScene extends Phaser.Scene {
       _drawStump(g);
       g.x = wx; g.y = wy;
 
-      const barBg = this.add.rectangle(wx, wy - 26, 44, 12, 0x111111).setDepth(14).setVisible(false);
+      const barBg   = this.add.rectangle(wx, wy - 26, 44, 12, 0x111111).setDepth(14).setVisible(false);
       const barFill = this.add.rectangle(wx - 18, wy - 26, 0, 8, 0xffaa00)
         .setOrigin(0, 0.5).setDepth(15).setVisible(false);
 
@@ -655,6 +798,19 @@ class GameScene extends Phaser.Scene {
     }
   }
 
+  _placeDogs() {
+    if (!this.cfg.dogs) return;
+    for (let i = 0; i < this.cfg.dogs; i++) {
+      const { tx, ty } = this._freeCell(8);
+      const wx = tx * TILE + TILE / 2;
+      const wy = LAWN_Y + ty * TILE + TILE / 2;
+      const g  = this.add.graphics().setDepth(5);
+      _drawDog(g);
+      g.x = wx; g.y = wy;
+      this.dogs.push({ gfx: g, tx, ty, scattered: false, chasing: false, wanderT: 0, wanderDx: 0, wanderDy: 0 });
+    }
+  }
+
   _freeCell(minManhattan = 3) {
     const cx = GRID_W / 2, cy = GRID_H / 2;
     for (let attempt = 0; attempt < 300; attempt++) {
@@ -664,7 +820,6 @@ class GameScene extends Phaser.Scene {
       if (Math.abs(tx - cx) + Math.abs(ty - cy) < minManhattan) continue;
       return { tx, ty };
     }
-    // Fallback: any open cell
     for (let ty = 1; ty < GRID_H - 1; ty++)
       for (let tx = 1; tx < GRID_W - 1; tx++)
         if (this.grid[ty][tx] === T_TALL) return { tx, ty };
@@ -680,7 +835,7 @@ class GameScene extends Phaser.Scene {
     body.lineStyle(3, 0x000000);    body.strokeRect(-20, -13, 40, 26);
     body.fillStyle(C_MOWER_STRIPE); body.fillRect(-20, -4, 40, 8);
     body.fillStyle(C_WHEEL);
-    [[-13,-9],[13,-9],[-13,9],[13,9]].forEach(([wx,wy]) => {
+    [[-13, -9], [13, -9], [-13, 9], [13, 9]].forEach(([wx, wy]) => {
       body.fillCircle(wx, wy, 6);
       body.fillStyle(0x888888); body.fillCircle(wx, wy, 3);
       body.fillStyle(C_WHEEL);
@@ -689,7 +844,6 @@ class GameScene extends Phaser.Scene {
     body.fillRect(-3, 13, 6, 14);
     body.fillRect(-12, 23, 24, 5);
 
-    // Spinning blade
     this.blade = this.add.graphics();
     this.blade.fillStyle(0xbbbbbb); this.blade.fillCircle(0, 0, 10);
     this.blade.fillStyle(0x999999);
@@ -697,72 +851,262 @@ class GameScene extends Phaser.Scene {
     this.blade.fillRect(-2, -10, 4, 20);
     this.blade.lineStyle(2, 0x333333); this.blade.strokeCircle(0, 0, 10);
 
-    this.mowerCont.add([body, this.blade]);
+    // Face (rotates with body — Flash-era charm)
+    this.mowerFace = this.add.graphics();
+    this._redrawFace('normal');
+
+    this.mowerCont.add([body, this.blade, this.mowerFace]);
+  }
+
+  // ── mower face ───────────────────────────────────────────────────
+  _redrawFace(state) {
+    const g = this.mowerFace;
+    g.clear();
+
+    if (state === 'normal') {
+      g.fillStyle(0x000000);
+      g.fillCircle(-6, -5, 3);
+      g.fillCircle(6, -5, 3);
+    } else if (state === 'xeyes') {
+      g.lineStyle(2, 0xff2222);
+      [[-9, -8, -3, -2], [-3, -8, -9, -2], [3, -8, 9, -2], [9, -8, 3, -2]]
+        .forEach(([x1, y1, x2, y2]) => {
+          g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.strokePath();
+        });
+    } else if (state === 'smile') {
+      g.fillStyle(0x000000);
+      g.fillCircle(-6, -5, 3);
+      g.fillCircle(6, -5, 3);
+      // Smile arc: bottom half of a circle
+      g.lineStyle(2, 0x000000);
+      g.beginPath();
+      g.arc(0, 1, 6, 0, Math.PI, false);
+      g.strokePath();
+    } else if (state === 'alert') {
+      // Wide eyes with highlight
+      g.fillStyle(0x000000);
+      g.fillCircle(-6, -5, 4);
+      g.fillCircle(6, -5, 4);
+      g.fillStyle(0xffffff);
+      g.fillCircle(-5, -6, 1.5);
+      g.fillCircle(7, -6, 1.5);
+      // Worry brows
+      g.lineStyle(2, 0x000000);
+      g.beginPath(); g.moveTo(-10, -11); g.lineTo(-3, -9); g.strokePath();
+      g.beginPath(); g.moveTo(10, -11);  g.lineTo(3, -9);  g.strokePath();
+    }
+  }
+
+  _setFaceState(state, duration) {
+    this.faceState = state;
+    this.faceTimer = duration;
+    this._redrawFace(state);
+  }
+
+  _updateMowerFace(delta) {
+    const lowGas = this.gas / this.cfg.gasMax < 0.2;
+
+    // Timed transient states (xeyes, smile)
+    if (this.faceState !== 'normal' && this.faceState !== 'alert') {
+      this.faceTimer -= delta;
+      if (this.faceTimer <= 0) {
+        this.faceState = lowGas ? 'alert' : 'normal';
+        this._redrawFace(this.faceState);
+      }
+      return;
+    }
+
+    // Transition normal <-> alert based on gas level
+    if (lowGas && this.faceState === 'normal') {
+      this.faceState = 'alert';
+      this._redrawFace('alert');
+    } else if (!lowGas && this.faceState === 'alert') {
+      this.faceState = 'normal';
+      this._redrawFace('normal');
+    }
+
+    // Scale wide eyes when very low on gas
+    this.mowerFace.setScale(lowGas ? 1.4 : 1.0);
+
+    // Blink
+    this.blinkTimer -= delta;
+    if (this.blinkTimer <= 0) {
+      this.mowerFace.clear(); // eyes disappear briefly
+      this.time.delayedCall(80, () => {
+        if (this.faceState === 'normal' || this.faceState === 'alert') {
+          this._redrawFace(this.faceState);
+        }
+      });
+      this.blinkTimer = Phaser.Math.Between(2000, 4000);
+    }
+  }
+
+  // ── screen shake ─────────────────────────────────────────────────
+  _shake(strength, duration) {
+    this.cameras.main.shake(duration, strength);
+  }
+
+  // ── per-level backdrop ───────────────────────────────────────────
+  _buildBackdrop() {
+    // Drawn at depth 19, visible through semi-transparent title/HUD bars at depth 20
+    const g = this.add.graphics().setDepth(19);
+    const n = this.lvlNum;
+
+    // Tint strip in title bar area
+    const tints = [0x3399cc, 0x229966, 0x8a5c2a, 0x444488, 0xff6622];
+    g.fillStyle(tints[n - 1], 0.35);
+    g.fillRect(0, 0, CW, TITLE_H);
+
+    // Tint strip in HUD area
+    g.fillStyle(tints[n - 1], 0.18);
+    g.fillRect(0, HUD_Y, CW, HUD_H);
+
+    // Small thematic icon at right edge of title bar
+    if (n === 1) {
+      g.fillStyle(0xffee44, 0.6); g.fillCircle(CW - 20, 20, 11);
+      g.fillStyle(0xffcc00, 0.3);
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        g.fillRect(CW - 20 + Math.cos(a) * 14 - 1, 20 + Math.sin(a) * 14 - 1, 3, 3);
+      }
+    } else if (n === 2) {
+      g.fillStyle(C_GAS_CAN, 0.5); g.fillRect(CW - 30, 10, 18, 22);
+      g.fillStyle(0xffcc00, 0.5);  g.fillRect(CW - 25, 6, 8, 6);
+    } else if (n === 3) {
+      g.fillStyle(0x5c2d00, 0.5); g.fillRect(CW - 24, 14, 8, 22);
+      g.fillStyle(0x1a5c1a, 0.4); g.fillCircle(CW - 20, 14, 13);
+    } else if (n === 4) {
+      g.fillStyle(C_CRICKET, 0.45); g.fillEllipse(CW - 20, 20, 22, 14);
+      g.fillStyle(0x33aa33, 0.45); g.fillCircle(CW - 10, 14, 8);
+    } else if (n === 5) {
+      // Moon + stars
+      g.fillStyle(0xffe0a0, 0.55); g.fillCircle(CW - 22, 20, 9);
+      g.fillStyle(0x1a0000, 0.7);  g.fillCircle(CW - 18, 17, 7);
+      g.fillStyle(0xffffff, 0.6);
+      [[CW - 38, 10], [CW - 46, 22], [CW - 34, 30]].forEach(([sx, sy]) =>
+        g.fillCircle(sx, sy, 1.5),
+      );
+    }
   }
 
   // ── build title bar & HUD ────────────────────────────────────────
   _buildTitleBar() {
-    this.add.rectangle(CW/2, TITLE_H/2, CW, TITLE_H, 0x111111).setDepth(20);
-    this.add.text(10, TITLE_H/2,
+    this.add.rectangle(CW / 2, TITLE_H / 2, CW, TITLE_H, 0x111111, 0.88).setDepth(20);
+    this.add.text(10, TITLE_H / 2,
       `${this.cfg.title}: ${this.cfg.sub}  —  ${this.cfg.desc}`, {
       fontSize: '13px', fill: '#ffcc00', fontFamily: 'Courier New',
     }).setOrigin(0, 0.5).setDepth(21);
     const sp = window._spotifyConnected ? '♫ THE GOON SONG' : '♫ NO MUSIC';
     const sc = window._spotifyConnected ? '#1DB954' : '#444';
-    this.add.text(CW - 10, TITLE_H/2, sp, {
+    this.add.text(CW - 10, TITLE_H / 2, sp, {
       fontSize: '12px', fill: sc, fontFamily: 'Courier New',
     }).setOrigin(1, 0.5).setDepth(21);
   }
 
   _buildHUD() {
-    // Dark HUD strip
-    this.add.rectangle(CW/2, HUD_Y + HUD_H/2, CW, HUD_H, C_HUD_BG).setDepth(20);
+    this.add.rectangle(CW / 2, HUD_Y + HUD_H / 2, CW, HUD_H, C_HUD_BG, 0.90).setDepth(20);
 
-    // Row 1: gas
+    // Row 1 ── gas bar
     this.add.text(10, HUD_Y + 16, 'GAS:', {
       fontSize: '13px', fill: '#aaa', fontFamily: 'Courier New',
     }).setOrigin(0, 0.5).setDepth(21);
 
-    // Gas bar bg
     this.add.rectangle(215, HUD_Y + 16, 200, 18, 0x333333).setDepth(21);
-    // Gas bar fill (origin left-center)
     this.gasBar = this.add.rectangle(117, HUD_Y + 16, 196, 14, 0x00cc44)
       .setOrigin(0, 0.5).setDepth(22);
-    // Gas % label inside bar
     this.gasPctTxt = this.add.text(215, HUD_Y + 16, '100%', {
       fontSize: '11px', fill: '#fff', fontFamily: 'Courier New',
     }).setOrigin(0.5, 0.5).setDepth(23);
 
-    // Cut %
+    // Row 1 ── cut %
     this.cutTxt = this.add.text(340, HUD_Y + 16, 'CUT: 0%', {
       fontSize: '16px', fill: '#fff', fontFamily: 'Courier New', fontStyle: 'bold',
     }).setOrigin(0, 0.5).setDepth(21);
 
-    // Goal
-    this.add.text(500, HUD_Y + 16,
-      `GOAL: ${Math.floor(this.cfg.win * 100)}%`, {
+    // Row 1 ── goal
+    this.add.text(468, HUD_Y + 16, `GOAL: ${Math.floor(this.cfg.win * 100)}%`, {
       fontSize: '14px', fill: '#ffcc00', fontFamily: 'Courier New',
     }).setOrigin(0, 0.5).setDepth(21);
 
-    // Level indicator (dots)
+    // Row 1 ── score (stacked label + value)
+    this.add.text(578, HUD_Y + 8, 'SCORE', {
+      fontSize: '9px', fill: '#666', fontFamily: 'Courier New',
+    }).setOrigin(0.5, 0).setDepth(21);
+    this.scoreTxt = this.add.text(578, HUD_Y + 19, '0', {
+      fontSize: '13px', fill: '#ffcc00', fontFamily: 'Courier New', fontStyle: 'bold',
+    }).setOrigin(0.5, 0).setDepth(21);
+
+    // Row 1 ── level indicator dots
     for (let i = 0; i < 5; i++) {
-      const active = i < this.lvlNum;
-      this.add.circle(680 + i * 18, HUD_Y + 16, 6, active ? C_MOWER : 0x333333).setDepth(21);
+      this.add.circle(660 + i * 16, HUD_Y + 16, 5, i < this.lvlNum ? C_MOWER : 0x333333).setDepth(21);
     }
 
-    // Row 2: controls
+    // Row 2 ── controls hint
     let ctrlTxt = 'WASD / ARROWS: mow';
-    if (this.cfg.stumps > 0) ctrlTxt += '   HOLD SPACE: dig stumps';
-    if (this.cfg.crickets > 0) ctrlTxt += '   ⚠ AVOID CRICKETS  (-30 gas per splat)';
-    this.add.text(CW/2, HUD_Y + 42, ctrlTxt, {
+    if (this.cfg.stumps   > 0) ctrlTxt += '   HOLD SPACE: dig stumps';
+    if (this.cfg.crickets > 0) ctrlTxt += '   ⚠ AVOID CRICKETS (-30 gas)';
+    if (this.cfg.dogs     > 0) ctrlTxt += '   ⚠ AVOID DOG';
+    this.add.text(CW / 2, HUD_Y + 42, ctrlTxt, {
       fontSize: '11px', fill: '#556655', fontFamily: 'Courier New',
     }).setOrigin(0.5, 0.5).setDepth(21);
 
-    // Row 3: current gas cans / stumps remaining
-    this.add.text(CW/2, HUD_Y + 62,
-      `Cans: ${this.cfg.cans}  Stumps: ${this.cfg.stumps}  Crickets: ${this.cfg.crickets}`, {
-      fontSize: '10px', fill: '#334433', fontFamily: 'Courier New',
-    }).setOrigin(0.5, 0.5).setDepth(21);
+    // Row 3 ── live item icons
+    this.iconRow = null;
+    this._buildIconRow();
+  }
+
+  _buildIconRow() {
+    if (this.iconRow) this.iconRow.forEach(ic => ic.gfx.destroy());
+    this.iconRow = [];
+
+    const y = HUD_Y + 63;
+    let x = 12;
+
+    for (let i = 0; i < this.cfg.cans; i++) {
+      const g = this.add.graphics().setDepth(22);
+      g.fillStyle(C_GAS_CAN); g.fillRect(x, y - 8, 11, 13);
+      g.fillStyle(0xffcc00);  g.fillRect(x + 2, y - 12, 7, 5);
+      this.iconRow.push({ gfx: g, type: 'can', index: i });
+      x += 17;
+    }
+    x += 4;
+
+    for (let i = 0; i < this.cfg.stumps; i++) {
+      const g = this.add.graphics().setDepth(22);
+      g.fillStyle(C_STUMP); g.fillCircle(x + 6, y, 6);
+      this.iconRow.push({ gfx: g, type: 'stump', index: i });
+      x += 17;
+    }
+    x += 4;
+
+    for (let i = 0; i < this.cfg.crickets; i++) {
+      const g = this.add.graphics().setDepth(22);
+      g.fillStyle(C_CRICKET); g.fillEllipse(x + 8, y, 16, 10);
+      g.fillStyle(0x33aa33);  g.fillCircle(x + 15, y - 3, 6);
+      this.iconRow.push({ gfx: g, type: 'cricket', index: i });
+      x += 20;
+    }
+    x += 4;
+
+    for (let i = 0; i < this.cfg.dogs; i++) {
+      const g = this.add.graphics().setDepth(22);
+      g.fillStyle(C_DOG); g.fillEllipse(x + 8, y + 1, 18, 11);
+      g.fillCircle(x + 17, y - 3, 7);
+      this.iconRow.push({ gfx: g, type: 'dog', index: i });
+      x += 24;
+    }
+  }
+
+  _updateIconRow() {
+    if (!this.iconRow) return;
+    for (const ic of this.iconRow) {
+      let used = false;
+      if (ic.type === 'can')     used = !!this.cans[ic.index]?.dead;
+      if (ic.type === 'stump')   used = !!this.stumps[ic.index]?.dug;
+      if (ic.type === 'cricket') used = !!this.crickets[ic.index]?.splatted;
+      if (ic.type === 'dog')     used = !!this.dogs[ic.index]?.scattered;
+      ic.gfx.setAlpha(used ? 0.2 : 1.0);
+    }
   }
 
   // ── lawn renderer ────────────────────────────────────────────────
@@ -779,26 +1123,25 @@ class GameScene extends Phaser.Scene {
           this.lawnGfx.fillStyle(C_GRASS_TALL);
           this.lawnGfx.fillRect(x, y, TILE, TILE);
           this.lawnGfx.fillStyle(C_GRASS_BLADE);
-          this.lawnGfx.fillTriangle(x+3, y+TILE, x+7, y+9,  x+11, y+TILE);
-          this.lawnGfx.fillTriangle(x+13,y+TILE, x+17,y+7,  x+21, y+TILE);
-          this.lawnGfx.fillTriangle(x+22,y+TILE, x+26,y+10, x+30, y+TILE);
-        } else { // CUT or STUMP (stump object drawn on top)
+          this.lawnGfx.fillTriangle(x + 3,  y + TILE, x + 7,  y + 9,  x + 11, y + TILE);
+          this.lawnGfx.fillTriangle(x + 13, y + TILE, x + 17, y + 7,  x + 21, y + TILE);
+          this.lawnGfx.fillTriangle(x + 22, y + TILE, x + 26, y + 10, x + 30, y + TILE);
+        } else {
           this.lawnGfx.fillStyle(C_GRASS_CUT);
           this.lawnGfx.fillRect(x, y, TILE, TILE);
           this.lawnGfx.fillStyle(0x7aad3a);
-          this.lawnGfx.fillRect(x+5,  y+20, 2, 10);
-          this.lawnGfx.fillRect(x+15, y+18, 2, 12);
-          this.lawnGfx.fillRect(x+24, y+20, 2, 10);
+          this.lawnGfx.fillRect(x + 5,  y + 20, 2, 10);
+          this.lawnGfx.fillRect(x + 15, y + 18, 2, 12);
+          this.lawnGfx.fillRect(x + 24, y + 20, 2, 10);
         }
       }
     }
 
-    // Subtle grid lines
     this.lawnGfx.lineStyle(1, 0x000000, 0.07);
     for (let gx = 0; gx <= GRID_W; gx++)
-      this.lawnGfx.lineBetween(gx*TILE, LAWN_Y, gx*TILE, LAWN_Y+LAWN_H);
+      this.lawnGfx.lineBetween(gx * TILE, LAWN_Y, gx * TILE, LAWN_Y + LAWN_H);
     for (let gy = 0; gy <= GRID_H; gy++)
-      this.lawnGfx.lineBetween(0, LAWN_Y+gy*TILE, LAWN_W, LAWN_Y+gy*TILE);
+      this.lawnGfx.lineBetween(0, LAWN_Y + gy * TILE, LAWN_W, LAWN_Y + gy * TILE);
   }
 
   // ── utility ──────────────────────────────────────────────────────
@@ -807,7 +1150,10 @@ class GameScene extends Phaser.Scene {
       fontSize: `${size}px`, fill: color, fontFamily: 'Courier New', fontStyle: 'bold',
       stroke: '#000', strokeThickness: 3,
     }).setOrigin(0.5).setDepth(40);
-    this.tweens.add({ targets: t, y: y - 55, alpha: 0, duration: 1100, onComplete: () => t.destroy() });
+    this.tweens.add({
+      targets: t, y: y - 55, alpha: 0, duration: 1100,
+      onComplete: () => t.destroy(),
+    });
   }
 }
 
@@ -817,12 +1163,11 @@ class GameScene extends Phaser.Scene {
 class LevelCompleteScene extends Phaser.Scene {
   constructor() { super({ key: 'LevelComplete' }); }
 
-  init(data) { this.lvl = data.level; }
+  init(data) { this.lvl = data.level; this.lvlScore = data.score || 0; }
 
   create() {
-    this.add.rectangle(CW/2, CH/2, CW, CH, 0x081808);
+    this.add.rectangle(CW / 2, CH / 2, CW, CH, 0x081808);
 
-    // Confetti
     for (let i = 0; i < 50; i++) {
       const x   = Phaser.Math.Between(0, CW);
       const col = [0xffcc00, 0xff4444, 0x44ff44, 0x4488ff, 0xff44cc][i % 5];
@@ -834,15 +1179,18 @@ class LevelCompleteScene extends Phaser.Scene {
       });
     }
 
-    // Big text
-    const banner = this.add.text(CW/2, 140, 'LEVEL COMPLETE!', {
+    const banner = this.add.text(CW / 2, 130, 'LEVEL COMPLETE!', {
       fontSize: '56px', fill: '#ffcc00', fontFamily: 'Courier New',
       fontStyle: 'bold', stroke: '#000', strokeThickness: 8,
     }).setOrigin(0.5).setScale(0.1);
     this.tweens.add({ targets: banner, scaleX: 1, scaleY: 1, duration: 400, ease: 'Back.easeOut' });
 
-    this.add.text(CW/2, 240, LEVELS[this.lvl - 1].sub + ' — CLEARED!', {
+    this.add.text(CW / 2, 225, LEVELS[this.lvl - 1].sub + ' — CLEARED!', {
       fontSize: '22px', fill: '#ffffff', fontFamily: 'Courier New',
+    }).setOrigin(0.5);
+
+    this.add.text(CW / 2, 268, `LEVEL SCORE: ${this.lvlScore}    TOTAL: ${window._totalScore || 0}`, {
+      fontSize: '16px', fill: '#ffcc00', fontFamily: 'Courier New', fontStyle: 'bold',
     }).setOrigin(0.5);
 
     if (this.lvl >= 5) {
@@ -851,11 +1199,11 @@ class LevelCompleteScene extends Phaser.Scene {
     }
 
     const nextCfg = LEVELS[this.lvl];
-    this.add.text(CW/2, 300, `Next: ${nextCfg.title} — "${nextCfg.sub}"`, {
+    this.add.text(CW / 2, 314, `Next: ${nextCfg.title} — "${nextCfg.sub}"`, {
       fontSize: '17px', fill: '#8bc44a', fontFamily: 'Courier New',
     }).setOrigin(0.5);
 
-    const btn = this.add.text(CW/2, 380, `► LEVEL ${this.lvl + 1}`, {
+    const btn = this.add.text(CW / 2, 385, `► LEVEL ${this.lvl + 1}`, {
       fontSize: '28px', fill: '#000', fontFamily: 'Courier New', fontStyle: 'bold',
       backgroundColor: '#ffcc00', padding: { x: 22, y: 12 },
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
@@ -865,7 +1213,7 @@ class LevelCompleteScene extends Phaser.Scene {
     this.input.keyboard.on('keydown-ENTER', () => this.scene.start('Game', { level: this.lvl + 1 }));
     this.input.keyboard.on('keydown-SPACE', () => this.scene.start('Game', { level: this.lvl + 1 }));
 
-    this.add.text(CW/2, 455, 'BACK TO MENU', {
+    this.add.text(CW / 2, 455, 'BACK TO MENU', {
       fontSize: '16px', fill: '#555', fontFamily: 'Courier New',
     }).setOrigin(0.5).setInteractive({ useHandCursor: true })
       .on('pointerdown', () => this.scene.start('Menu'));
@@ -881,32 +1229,31 @@ class GameOverScene extends Phaser.Scene {
   init(data) { this.lvl = data.level; }
 
   create() {
-    this.add.rectangle(CW/2, CH/2, CW, CH, 0x1a0000);
+    this.add.rectangle(CW / 2, CH / 2, CW, CH, 0x1a0000);
 
-    // Dead mower graphic
     const g = this.add.graphics();
-    g.fillStyle(0x888888); g.fillRect(CW/2-22, 200, 44, 30);
-    g.lineStyle(3, 0x444444); g.strokeRect(CW/2-22, 200, 44, 30);
-    g.fillStyle(0x555555); g.fillRect(CW/2-22, 212, 44, 8);
-    // X eyes
+    g.fillStyle(0x888888); g.fillRect(CW / 2 - 22, 200, 44, 30);
+    g.lineStyle(3, 0x444444); g.strokeRect(CW / 2 - 22, 200, 44, 30);
+    g.fillStyle(0x555555); g.fillRect(CW / 2 - 22, 212, 44, 8);
     g.lineStyle(3, 0xff2222);
-    [[CW/2-14,208,CW/2-4,218],[CW/2-4,208,CW/2-14,218],
-     [CW/2+4,208,CW/2+14,218],[CW/2+14,208,CW/2+4,218]]
-      .forEach(([x1,y1,x2,y2]) => g.lineBetween(x1,y1,x2,y2));
-    // Sad smoke
+    [[CW / 2 - 14, 208, CW / 2 - 4, 218], [CW / 2 - 4, 208, CW / 2 - 14, 218],
+     [CW / 2 + 4,  208, CW / 2 + 14, 218], [CW / 2 + 14, 208, CW / 2 + 4,  218]]
+      .forEach(([x1, y1, x2, y2]) => g.lineBetween(x1, y1, x2, y2));
     g.lineStyle(2, 0x666666);
-    g.strokeCircle(CW/2, 198, 8); g.strokeCircle(CW/2, 186, 6); g.strokeCircle(CW/2, 176, 4);
+    g.strokeCircle(CW / 2, 198, 8);
+    g.strokeCircle(CW / 2, 186, 6);
+    g.strokeCircle(CW / 2, 176, 4);
 
-    this.add.text(CW/2, 130, 'OUT OF GAS!', {
+    this.add.text(CW / 2, 130, 'OUT OF GAS!', {
       fontSize: '54px', fill: '#ff3333', fontFamily: 'Courier New',
       fontStyle: 'bold', stroke: '#000', strokeThickness: 8,
     }).setOrigin(0.5);
 
-    this.add.text(CW/2, 265, `Level ${this.lvl}: ${LEVELS[this.lvl-1].sub}`, {
+    this.add.text(CW / 2, 265, `Level ${this.lvl}: ${LEVELS[this.lvl - 1].sub}`, {
       fontSize: '18px', fill: '#888', fontFamily: 'Courier New',
     }).setOrigin(0.5);
 
-    const retry = this.add.text(CW/2, 350, '↺  TRY AGAIN', {
+    const retry = this.add.text(CW / 2, 350, '↺  TRY AGAIN', {
       fontSize: '28px', fill: '#000', fontFamily: 'Courier New', fontStyle: 'bold',
       backgroundColor: '#ffcc00', padding: { x: 22, y: 12 },
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
@@ -914,7 +1261,7 @@ class GameOverScene extends Phaser.Scene {
     retry.on('pointerdown', () => this.scene.start('Game', { level: this.lvl }));
     this.input.keyboard.on('keydown-ENTER', () => this.scene.start('Game', { level: this.lvl }));
 
-    this.add.text(CW/2, 440, 'BACK TO MENU', {
+    this.add.text(CW / 2, 440, 'BACK TO MENU', {
       fontSize: '16px', fill: '#555', fontFamily: 'Courier New',
     }).setOrigin(0.5).setInteractive({ useHandCursor: true })
       .on('pointerdown', () => this.scene.start('Menu'));
@@ -932,54 +1279,61 @@ class WinScene extends Phaser.Scene {
 
     const bg = this.add.graphics();
     bg.fillStyle(0x081408); bg.fillRect(0, 0, CW, CH);
-    // Rainbow stripes
-    const stripes = [0xff0000,0xff8800,0xffff00,0x00cc00,0x0088ff,0x8800ff];
+    const stripes = [0xff0000, 0xff8800, 0xffff00, 0x00cc00, 0x0088ff, 0x8800ff];
     stripes.forEach((c, i) => {
-      bg.fillStyle(c, 0.08); bg.fillRect(0, i * (CH/6), CW, CH/6);
+      bg.fillStyle(c, 0.08); bg.fillRect(0, i * (CH / 6), CW, CH / 6);
     });
 
-    // Mower victory lap
-    const vic = this.add.container(-50, CH/2 + 60).setDepth(5);
-    const vg = this.add.graphics();
-    vg.fillStyle(C_MOWER);    vg.fillRect(-22, -14, 44, 28);
-    vg.lineStyle(3, 0x000000); vg.strokeRect(-22, -14, 44, 28);
+    const vic = this.add.container(-50, CH / 2 + 60).setDepth(5);
+    const vg  = this.add.graphics();
+    vg.fillStyle(C_MOWER);        vg.fillRect(-22, -14, 44, 28);
+    vg.lineStyle(3, 0x000000);    vg.strokeRect(-22, -14, 44, 28);
     vg.fillStyle(C_MOWER_STRIPE); vg.fillRect(-22, -4, 44, 8);
     vic.add(vg);
-    this.tweens.add({ targets: vic, x: CW + 50, duration: 3000, repeat: -1, onRepeat: () => { vic.x = -50; } });
+    this.tweens.add({
+      targets: vic, x: CW + 50, duration: 3000, repeat: -1,
+      onRepeat: () => { vic.x = -50; },
+    });
 
-    this.add.text(CW/2, 100, '🏆 YOU WIN! 🏆', {
+    this.add.text(CW / 2, 75, '🏆 YOU WIN! 🏆', {
       fontSize: '58px', fill: '#ffcc00', fontFamily: 'Courier New',
       fontStyle: 'bold', stroke: '#000', strokeThickness: 8,
     }).setOrigin(0.5);
 
-    this.add.text(CW/2, 190, 'ALL 5 YARDS MOWED!', {
+    this.add.text(CW / 2, 165, 'ALL 5 YARDS MOWED!', {
       fontSize: '28px', fill: '#ffffff', fontFamily: 'Courier New', fontStyle: 'bold',
     }).setOrigin(0.5);
 
-    this.add.text(CW/2, 248, 'STUMPS REMOVED. CRICKETS DODGED.', {
-      fontSize: '17px', fill: '#8bc44a', fontFamily: 'Courier New',
+    this.add.text(CW / 2, 212, 'STUMPS REMOVED. CRICKETS DODGED. DOG OUTWITTED.', {
+      fontSize: '14px', fill: '#8bc44a', fontFamily: 'Courier New',
     }).setOrigin(0.5);
 
-    this.add.text(CW/2, 284, 'THE GOON SONG PLAYED IN FULL.', {
+    this.add.text(CW / 2, 248, 'THE GOON SONG PLAYED IN FULL.', {
       fontSize: '17px', fill: '#1DB954', fontFamily: 'Courier New',
     }).setOrigin(0.5);
 
-    this.add.text(CW/2, 330, 'GRASS: CUT.', {
+    this.add.text(CW / 2, 284, 'GRASS: CUT.', {
       fontSize: '22px', fill: '#ffcc00', fontFamily: 'Courier New', fontStyle: 'bold',
     }).setOrigin(0.5);
 
-    // Confetti blast
+    const total = window._totalScore || 0;
+    this.add.text(CW / 2, 338, `FINAL SCORE: ${total}`, {
+      fontSize: '28px', fill: '#ffffff', fontFamily: 'Courier New', fontStyle: 'bold',
+      stroke: '#ffcc00', strokeThickness: 2,
+    }).setOrigin(0.5);
+
     for (let i = 0; i < 60; i++) {
       const x   = Phaser.Math.Between(0, CW);
-      const col = [0xffcc00,0xff4444,0x44ff44,0x4488ff,0xff44cc,0xffffff][i%6];
-      const dot = this.add.circle(x, -15, Phaser.Math.Between(4,10), col);
+      const col = [0xffcc00, 0xff4444, 0x44ff44, 0x4488ff, 0xff44cc, 0xffffff][i % 6];
+      const dot = this.add.circle(x, -15, Phaser.Math.Between(4, 10), col);
       this.tweens.add({
-        targets: dot, y: CH + 20, x: x + Phaser.Math.Between(-120,120),
-        duration: Phaser.Math.Between(2000, 4000), delay: Phaser.Math.Between(0, 1200), repeat: -1,
+        targets: dot, y: CH + 20, x: x + Phaser.Math.Between(-120, 120),
+        duration: Phaser.Math.Between(2000, 4000), delay: Phaser.Math.Between(0, 1200),
+        repeat: -1,
       });
     }
 
-    const play = this.add.text(CW/2, 455, 'PLAY AGAIN', {
+    const play = this.add.text(CW / 2, 448, 'PLAY AGAIN', {
       fontSize: '26px', fill: '#000', fontFamily: 'Courier New', fontStyle: 'bold',
       backgroundColor: '#ffcc00', padding: { x: 24, y: 14 },
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
@@ -990,67 +1344,78 @@ class WinScene extends Phaser.Scene {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  Drawing helpers (used by scene create methods)
+//  Drawing helpers
 // ═══════════════════════════════════════════════════════════════════
 
 function _drawCan(g) {
-  // Body
-  g.fillStyle(C_GAS_CAN);  g.fillRect(-11, -10, 22, 22);
+  g.fillStyle(C_GAS_CAN);   g.fillRect(-11, -10, 22, 22);
   g.lineStyle(2, 0x000000); g.strokeRect(-11, -10, 22, 22);
-  // White highlight stripe
   g.fillStyle(0xffffff, 0.2); g.fillRect(-11, -10, 22, 5);
-  // Cap
   g.fillStyle(0xffcc00);    g.fillRect(-6, -17, 12, 9);
   g.lineStyle(2, 0x000000); g.strokeRect(-6, -17, 12, 9);
-  // Nozzle
   g.fillStyle(0xccaa00);    g.fillRect(-2, -21, 4, 6);
-  // Handle
   g.lineStyle(3, 0x000000);
-  g.beginPath(); g.moveTo(-11,-4); g.lineTo(-16,-4); g.lineTo(-16,6); g.lineTo(-11,6); g.strokePath();
-  // G label
+  g.beginPath(); g.moveTo(-11, -4); g.lineTo(-16, -4); g.lineTo(-16, 6); g.lineTo(-11, 6); g.strokePath();
   g.fillStyle(0xffffff, 0.6); g.fillRect(-5, -4, 10, 12);
 }
 
 function _drawStump(g) {
-  // Dirt shadow
   g.fillStyle(0x5c2d00, 0.4); g.fillEllipse(2, 17, 32, 10);
-  // Main stump body
-  g.fillStyle(C_STUMP);      g.fillCircle(0, 0, 15);
-  g.lineStyle(3, 0x000000);  g.strokeCircle(0, 0, 15);
-  // Tree rings
+  g.fillStyle(C_STUMP);       g.fillCircle(0, 0, 15);
+  g.lineStyle(3, 0x000000);   g.strokeCircle(0, 0, 15);
   g.lineStyle(1, 0x5c2d00, 0.7);
   [10, 6, 3].forEach(r => g.strokeCircle(0, 0, r));
-  // Center dot
   g.fillStyle(0x5c2d00); g.fillCircle(0, 0, 2);
-  // Roots
   g.lineStyle(3, 0x5c2d00);
-  [[-7,12,-13,20],[-1,15,0,22],[6,12,11,20]].forEach(([x1,y1,x2,y2]) => {
-    g.beginPath(); g.moveTo(x1,y1); g.lineTo(x2,y2); g.strokePath();
+  [[-7, 12, -13, 20], [-1, 15, 0, 22], [6, 12, 11, 20]].forEach(([x1, y1, x2, y2]) => {
+    g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.strokePath();
   });
 }
 
 function _drawCricket(g) {
-  // Body
   g.fillStyle(C_CRICKET);     g.fillEllipse(0, 2, 24, 15);
   g.lineStyle(2, 0x000000);   g.strokeEllipse(0, 2, 24, 15);
-  // Head
   g.fillStyle(0x33aa33);      g.fillCircle(10, -2, 8);
   g.lineStyle(2, 0x000000);   g.strokeCircle(10, -2, 8);
-  // Eye
   g.fillStyle(0x000000);      g.fillCircle(13, -3, 2.5);
   g.fillStyle(0xffffff);      g.fillCircle(14, -4, 1);
-  // Antennae
   g.lineStyle(1, 0x000000);
-  g.beginPath(); g.moveTo(12,-9); g.lineTo(20,-20); g.strokePath();
-  g.beginPath(); g.moveTo(10,-10); g.lineTo(16,-22); g.strokePath();
-  // Legs (3 pairs)
+  g.beginPath(); g.moveTo(12, -9);  g.lineTo(20, -20); g.strokePath();
+  g.beginPath(); g.moveTo(10, -10); g.lineTo(16, -22); g.strokePath();
   g.lineStyle(2, 0x006600);
-  [[-6,-3,-14,-10],[-2,-3,-8,-12],[3,-3,2,-12],
-   [-6,8,-14,16],[-2,8,-6,16],[3,8,6,16]]
-    .forEach(([x1,y1,x2,y2]) => { g.beginPath(); g.moveTo(x1,y1); g.lineTo(x2,y2); g.strokePath(); });
-  // Big hind legs
+  [[-6, -3, -14, -10], [-2, -3, -8, -12], [3, -3, 2, -12],
+   [-6, 8, -14, 16],   [-2, 8, -6, 16],   [3, 8, 6, 16]]
+    .forEach(([x1, y1, x2, y2]) => { g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.strokePath(); });
   g.lineStyle(3, 0x228b22);
-  g.beginPath(); g.moveTo(-8,2); g.lineTo(-18,-6); g.lineTo(-12,14); g.strokePath();
+  g.beginPath(); g.moveTo(-8, 2); g.lineTo(-18, -6); g.lineTo(-12, 14); g.strokePath();
+}
+
+function _drawDog(g) {
+  // Shadow
+  g.fillStyle(0x000000, 0.15); g.fillEllipse(1, 11, 34, 8);
+  // Body
+  g.fillStyle(C_DOG);          g.fillEllipse(0, 0, 32, 18);
+  g.lineStyle(2, 0x8a6030);    g.strokeEllipse(0, 0, 32, 18);
+  // Head
+  g.fillStyle(C_DOG);          g.fillCircle(14, -4, 10);
+  g.lineStyle(2, 0x8a6030);    g.strokeCircle(14, -4, 10);
+  // Floppy ear
+  g.fillStyle(0xa07040);
+  g.fillTriangle(8, -12, 3, -22, 14, -16);
+  g.lineStyle(1, 0x7a5020);
+  g.beginPath(); g.moveTo(8, -12); g.lineTo(3, -22); g.lineTo(14, -16); g.strokePath();
+  // Eye
+  g.fillStyle(0x000000); g.fillCircle(18, -6, 2.5);
+  g.fillStyle(0xffffff); g.fillCircle(19, -7, 1);
+  // Nose
+  g.fillStyle(0x3a1a00); g.fillCircle(22, -2, 2.5);
+  // Tail
+  g.lineStyle(4, C_DOG);
+  g.beginPath(); g.moveTo(-14, -2); g.lineTo(-22, -10); g.strokePath();
+  // Legs
+  g.lineStyle(4, C_DOG);
+  [[-8, 8, -8, 18], [0, 9, 0, 19], [6, 8, 6, 18], [12, 7, 12, 17]]
+    .forEach(([x1, y1, x2, y2]) => { g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.strokePath(); });
 }
 
 // ═══════════════════════════════════════════════════════════════════
