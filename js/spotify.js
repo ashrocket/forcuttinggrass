@@ -1,50 +1,13 @@
-// Spotify PKCE Auth + Web Playback SDK wrapper
+// Spotify token access — reads shared cookies set by the lobby.
+// Auth is handled entirely at bandmusicgames.party; games never
+// redirect to Spotify themselves.
 
 const SpotifyAuth = {
-  async login() {
-    const verifier  = _pkceVerifier();
-    const challenge = await _pkceChallenge(verifier);
-    sessionStorage.setItem('sp_verifier', verifier);
-
-    const p = new URLSearchParams({
-      client_id:             CONFIG.spotifyClientId,
-      response_type:         'code',
-      redirect_uri:          CONFIG.spotifyRedirectUri,
-      scope:                 'streaming user-read-email user-read-private',
-      code_challenge_method: 'S256',
-      code_challenge:        challenge,
-    });
-    window.location.href = `https://accounts.spotify.com/authorize?${p}`;
-  },
-
-  async handleCallback(code) {
-    const verifier = sessionStorage.getItem('sp_verifier');
-    const res = await fetch('https://accounts.spotify.com/api/token', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body:    new URLSearchParams({
-        client_id:     CONFIG.spotifyClientId,
-        grant_type:    'authorization_code',
-        code,
-        redirect_uri:  CONFIG.spotifyRedirectUri,
-        code_verifier: verifier,
-      }),
-    });
-    if (!res.ok) return false;
-    const d = await res.json();
-    _saveTokens(d);
-    return true;
-  },
-
-  hasToken() {
-    return !!(sessionStorage.getItem('sp_token') &&
-              Date.now() < +sessionStorage.getItem('sp_expires'));
-  },
-
-  getToken() { return sessionStorage.getItem('sp_token'); },
+  hasToken() { return !!_readToken('sp_token'); },
+  getToken()  { return _readToken('sp_token'); },
 
   async refresh() {
-    const rt = sessionStorage.getItem('sp_refresh');
+    const rt = _readToken('sp_refresh');
     if (!rt) return null;
     const res = await fetch('https://accounts.spotify.com/api/token', {
       method:  'POST',
@@ -57,34 +20,39 @@ const SpotifyAuth = {
     });
     if (!res.ok) return null;
     const d = await res.json();
-    _saveTokens(d);
+    _writeToken('sp_token', d.access_token, d.expires_in);
+    if (d.refresh_token) _writeToken('sp_refresh', d.refresh_token, 60 * 60 * 24 * 30);
     return d.access_token;
   },
 };
 
-function _saveTokens(d) {
-  sessionStorage.setItem('sp_token',   d.access_token);
-  sessionStorage.setItem('sp_expires', Date.now() + d.expires_in * 1000);
-  if (d.refresh_token) sessionStorage.setItem('sp_refresh', d.refresh_token);
+// ─── Storage helpers ───────────────────────────────────────────────
+
+function _readToken(name) {
+  if (location.hostname === 'localhost') return sessionStorage.getItem(name);
+  const m = document.cookie.match(new RegExp('(?:^|;\\s*)' + name + '=([^;]+)'));
+  return m ? decodeURIComponent(m[1]) : null;
 }
 
-function _pkceVerifier() {
-  const arr = new Uint8Array(32);
-  crypto.getRandomValues(arr);
-  return btoa(String.fromCharCode(...arr))
-    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+function _writeToken(name, value, maxAge) {
+  if (location.hostname === 'localhost') {
+    sessionStorage.setItem(name, value);
+    return;
+  }
+  document.cookie = [
+    `${name}=${encodeURIComponent(value)}`,
+    `max-age=${maxAge}`,
+    `domain=.bandmusicgames.party`,
+    `path=/`,
+    `secure`,
+    `samesite=lax`,
+  ].join('; ');
 }
 
-async function _pkceChallenge(v) {
-  const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(v));
-  return btoa(String.fromCharCode(...new Uint8Array(hash)))
-    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-}
-
-// ─── Web Playback SDK wrapper ─────────────────────────────────────
+// ─── Web Playback SDK wrapper ──────────────────────────────────────
 
 const SpotifyPlayer = {
-  _player: null,
+  _player:   null,
   _deviceId: null,
 
   async init() {
@@ -112,7 +80,7 @@ const SpotifyPlayer = {
       console.log('[Spotify] ready, device:', device_id);
     });
 
-    this._player.on('not_ready',           () => console.warn('[Spotify] went offline'));
+    this._player.on('not_ready',            () => console.warn('[Spotify] went offline'));
     this._player.on('initialization_error', e  => console.error('[Spotify] init error:', e.message));
     this._player.on('authentication_error', e  => console.error('[Spotify] auth error:', e.message));
     this._player.on('account_error',        e  => console.error('[Spotify] account error (Premium required):', e.message));
@@ -131,20 +99,34 @@ const SpotifyPlayer = {
     });
   },
 
-  pause()          { this._player?.pause(); },
-  resume()         { this._player?.resume(); },
-  setVolume(v)     { this._player?.setVolume(v); },
-  isReady()        { return !!this._deviceId; },
+  pause()      { this._player?.pause(); },
+  resume()     { this._player?.resume(); },
+  setVolume(v) { this._player?.setVolume(v); },
+  isReady()    { return !!this._deviceId; },
 };
 
-// ─── Bootstrap on page load ───────────────────────────────────────
+// ─── Bootstrap ────────────────────────────────────────────────────
 
 (async function bootstrap() {
+  const skip = _readToken('sp_skip') === '1';
+
+  if (skip) {
+    document.getElementById('spotify-overlay').classList.add('hidden');
+    window._gameReady = true;
+    return;
+  }
+
   if (SpotifyAuth.hasToken()) {
     document.getElementById('spotify-overlay').classList.add('hidden');
     await SpotifyPlayer.init();
     window._spotifyConnected = true;
     window._gameReady = true;
+    return;
   }
-  // Otherwise overlay stays visible; user clicks Connect or Skip
+
+  // No token — send to lobby (unless local dev)
+  if (location.hostname !== 'localhost') {
+    window.location.href = 'https://bandmusicgames.party';
+  }
+  // On localhost overlay stays; skip button still works for testing
 })();
