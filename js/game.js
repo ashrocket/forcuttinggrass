@@ -33,6 +33,15 @@ const C_CRICKET     = 0x228b22;
 const C_HUD_BG      = 0x0d1a0d;
 const C_DOG         = 0xc8a060;
 
+// ─── Cookie helpers ───────────────────────────────────────────────
+function saveLevel(n) {
+  document.cookie = `fcg_level=${n};max-age=${60 * 60 * 24 * 365};path=/`;
+}
+function getSavedLevel() {
+  const m = document.cookie.match(/fcg_level=(\d)/);
+  return m ? Math.min(parseInt(m[1]), 5) : 1;
+}
+
 // ─── Level configs ────────────────────────────────────────────────
 const LEVELS = [
   {
@@ -53,7 +62,7 @@ const LEVELS = [
     n: 3, title: 'LEVEL 3', sub: 'STUMP TROUBLE',
     desc: 'Hold SPACE near stumps to dig them up.',
     gasMax: 180, gasDrain: 0.20,
-    cans: 1, stumps: 2, crickets: 0, dogs: 0, cricketMs: 0,
+    cans: 2, stumps: 2, crickets: 0, dogs: 0, cricketMs: 0,
     win: 0.80,
   },
   {
@@ -211,31 +220,41 @@ class MenuScene extends Phaser.Scene {
       fontSize: '13px', fill: '#aaa', fontFamily: 'Courier New',
     }).setOrigin(0.5);
 
+    const saved = getSavedLevel();
+
     for (let i = 0; i < 5; i++) {
       const bx = CW / 2 - 100 + i * 50;
       const by = CH / 2 + 55;
-      const box = this.add.rectangle(bx, by, 40, 40, 0x111111)
-        .setStrokeStyle(2, C_MOWER)
+      const isSaved = (i + 1 === saved && saved > 1);
+      const box = this.add.rectangle(bx, by, 40, 40, isSaved ? 0x224422 : 0x111111)
+        .setStrokeStyle(isSaved ? 3 : 2, isSaved ? 0xffcc00 : C_MOWER)
         .setInteractive({ useHandCursor: true });
       const lbl = this.add.text(bx, by, `${i + 1}`, {
-        fontSize: '18px', fill: '#fff', fontFamily: 'Courier New', fontStyle: 'bold',
+        fontSize: '18px', fill: isSaved ? '#ffcc00' : '#fff',
+        fontFamily: 'Courier New', fontStyle: 'bold',
       }).setOrigin(0.5);
       box.on('pointerover', () => { box.setFillStyle(0x334433); lbl.setStyle({ fill: '#ffcc00' }); });
-      box.on('pointerout',  () => { box.setFillStyle(0x111111); lbl.setStyle({ fill: '#fff' }); });
+      box.on('pointerout',  () => { box.setFillStyle(isSaved ? 0x224422 : 0x111111); lbl.setStyle({ fill: isSaved ? '#ffcc00' : '#fff' }); });
       box.on('pointerdown', () => this._start(i + 1));
     }
 
-    this._menuMower = this._makeMiniMower(-64, CH / 2 + 110);
+    if (saved > 1) {
+      this.add.text(CW / 2, CH / 2 + 95, `► CONTINUE FROM LEVEL ${saved}`, {
+        fontSize: '14px', fill: '#ffcc00', fontFamily: 'Courier New', fontStyle: 'bold',
+      }).setOrigin(0.5);
+    }
+
+    this._menuMower = this._makeMiniMower(-64, CH / 2 + 120);
     this.tweens.add({
       targets: this._menuMower,
       x: CW + 64, duration: 3800, repeat: -1,
       onRepeat: () => { this._menuMower.x = -64; },
     });
 
-    this.input.keyboard.on('keydown-ENTER', () => this._start(1));
-    this.input.keyboard.on('keydown-SPACE', () => this._start(1));
+    this.input.keyboard.on('keydown-ENTER', () => this._start(saved));
+    this.input.keyboard.on('keydown-SPACE', () => this._start(saved));
     this.input.on('pointerdown', (ptr) => {
-      if (ptr.y < CH / 2 + 30 || ptr.y > CH / 2 + 80) this._start(1);
+      if (ptr.y < CH / 2 + 30 || ptr.y > CH / 2 + 100) this._start(saved);
     });
   }
 
@@ -290,6 +309,10 @@ class GameScene extends Phaser.Scene {
     this.blinkTimer = Phaser.Math.Between(2000, 4000);
     // Sputter shake
     this.sputterShakeT = 0;
+    // Replay mode
+    this.replay = data.replay || false;
+    this._rRow  = 0;
+    this._rDir  = 1; // 1=right, -1=left
   }
 
   // ── create ──────────────────────────────────────────────────────
@@ -311,6 +334,15 @@ class GameScene extends Phaser.Scene {
     this._placeDogs();
 
     this.totalMow = GRID_W * GRID_H - this.stumps.length;
+    this.wideTimer = 0; // seconds remaining for double-wide power-up
+
+    if (this.replay) {
+      this.gas = 999999; // infinite gas during replay
+      this.add.text(CW / 2, 4, '◄◄ REPLAY ×5 ◄◄', {
+        fontSize: '13px', fill: '#ffcc00', fontFamily: 'Courier New', fontStyle: 'bold',
+        backgroundColor: '#000000aa', padding: { x: 8, y: 3 },
+      }).setOrigin(0.5, 0).setDepth(50);
+    }
 
     this.mx = LAWN_W / 2;
     this.my = LAWN_Y + LAWN_H / 2;
@@ -334,6 +366,7 @@ class GameScene extends Phaser.Scene {
   // ── update ──────────────────────────────────────────────────────
   update(time, delta) {
     if (this.state === 'over' || this.state === 'won') return;
+    if (this.replay) delta *= 5; // everything runs at 5× in replay
 
     this.blade.angle += 16;
 
@@ -351,6 +384,16 @@ class GameScene extends Phaser.Scene {
         this.time.delayedCall(600, () => this.scene.start('GameOver', { level: this.lvlNum }));
       }
       return;
+    }
+
+    // Wide-mower countdown
+    if (this.wideTimer > 0) {
+      const prev = this.wideTimer;
+      this.wideTimer = Math.max(0, this.wideTimer - delta / 1000);
+      if (this.wideTimer === 0 && prev > 0) {
+        this.tweens.add({ targets: this.mowerCont, scaleX: 1, duration: 160, ease: 'Quad.easeIn' });
+        this._floatText(this.mx, this.my - 40, 'NORMAL WIDTH', '#aaaaaa', 18);
+      }
     }
 
     this._input(delta);
@@ -372,6 +415,8 @@ class GameScene extends Phaser.Scene {
 
   // ── input & movement ────────────────────────────────────────────
   _input(delta) {
+    if (this.replay) { this._replayInput(delta); return; }
+
     const dt = delta / 1000;
     let dx = 0, dy = 0;
     if (this.cur.left.isDown  || this.wasd.left.isDown)  dx = -1;
@@ -408,6 +453,48 @@ class GameScene extends Phaser.Scene {
     this.mowerCont.y = this.my;
   }
 
+  // ── replay AI: snake-pattern mow ────────────────────────────────
+  _replayInput(delta) {
+    const dt      = delta / 1000;
+    const targetY = LAWN_Y + this._rRow * TILE + TILE / 2;
+    const targetX = this._rDir === 1 ? (LAWN_W - 18) : 18;
+
+    let dx = 0, dy = 0;
+
+    if (Math.abs(this.my - targetY) > 6) {
+      // Move to the current row's Y first
+      dy = this.my > targetY ? -1 : 1;
+    } else {
+      dx = this._rDir;
+      // Reached target X — advance to next row
+      if ((this._rDir === 1  && this.mx >= targetX - 6) ||
+          (this._rDir === -1 && this.mx <= targetX + 6)) {
+        if (this._rRow < GRID_H - 1) {
+          this._rRow++;
+          this._rDir *= -1;
+        }
+        // Stay at last row when done; _checkWin will fire
+      }
+    }
+
+    if (dx === 0 && dy === 0) {
+      if (this.moving) { SFX.stopMow(); this.moving = false; }
+      return;
+    }
+    if (!this.moving) { SFX.startMow(); this.moving = true; }
+
+    this.mowerCont.setRotation(Math.atan2(dy, dx) + Math.PI / 2);
+    const spd = 155 * dt;
+    const nx  = this.mx + dx * spd;
+    const ny  = this.my + dy * spd;
+    if (!this._blocked(nx, this.my)) this.mx = nx;
+    if (!this._blocked(this.mx, ny)) this.my = ny;
+    this.mx = Phaser.Math.Clamp(this.mx, 18, LAWN_W - 18);
+    this.my = Phaser.Math.Clamp(this.my, LAWN_Y + 18, LAWN_Y + LAWN_H - 18);
+    this.mowerCont.x = this.mx;
+    this.mowerCont.y = this.my;
+  }
+
   _blocked(x, y) {
     const h = 12;
     const pts = [
@@ -426,7 +513,7 @@ class GameScene extends Phaser.Scene {
   // ── grass cutting ────────────────────────────────────────────────
   _cutGrass() {
     if (!this.moving) return;
-    const h   = 15;
+    const h   = this.wideTimer > 0 ? 45 : 15;
     const lxT = Math.floor((this.mx - h) / TILE);
     const rxT = Math.floor((this.mx + h) / TILE);
     const tyT = Math.floor((this.my - LAWN_Y - h) / TILE);
@@ -476,7 +563,7 @@ class GameScene extends Phaser.Scene {
 
   // ── gas ─────────────────────────────────────────────────────────
   _drainGas(delta) {
-    if (!this.moving) return;
+    if (!this.moving || this.replay) return;
     this.gas -= this.cfg.gasDrain * (delta / 16.67);
     if (this.gas <= 0) {
       this.gas = 0;
@@ -511,7 +598,7 @@ class GameScene extends Phaser.Scene {
   // ── stump digging ────────────────────────────────────────────────
   _checkStumps(delta) {
     if (!this.cfg.stumps) return;
-    const digging = this.spKey.isDown;
+    const digging = this.replay || this.spKey.isDown;
 
     for (const s of this.stumps) {
       if (s.dug) continue;
@@ -540,6 +627,13 @@ class GameScene extends Phaser.Scene {
     s.barFill.destroy();
     SFX.pickup();
     this._floatText(s.wx, s.wy, 'STUMP GONE!', '#ffcc00', 20);
+
+    // Grant double-wide power-up
+    this.wideTimer = 10;
+    this._floatText(this.mx, this.my - 40, 'TRIPLE WIDE! 10s', '#ff88ff', 22);
+    this.tweens.add({
+      targets: this.mowerCont, scaleX: 3, duration: 180, ease: 'Back.easeOut',
+    });
     for (let i = 0; i < 8; i++) {
       const angle = (i / 8) * Math.PI * 2;
       const puff  = this.add.circle(
@@ -728,9 +822,18 @@ class GameScene extends Phaser.Scene {
       SFX.stopMow();
       SFX.levelDone();
       window._totalScore = (window._totalScore || 0) + this.score;
-      this.time.delayedCall(900, () =>
-        this.scene.start('LevelComplete', { level: this.lvlNum, score: this.score }),
-      );
+      if (this.replay) {
+        // In replay: silently advance to next level (or stop after level 5)
+        const next = this.lvlNum + 1;
+        this.time.delayedCall(400, () => {
+          if (next <= 5) this.scene.start('Game', { level: next, replay: true });
+          else           this.scene.start('Menu');
+        });
+      } else {
+        this.time.delayedCall(900, () =>
+          this.scene.start('LevelComplete', { level: this.lvlNum, score: this.score }),
+        );
+      }
     }
   }
 
@@ -1194,9 +1297,12 @@ class LevelCompleteScene extends Phaser.Scene {
     }).setOrigin(0.5);
 
     if (this.lvl >= 5) {
+      saveLevel(1); // completed all levels — reset saved progress
       this.time.delayedCall(2000, () => this.scene.start('Win'));
       return;
     }
+
+    saveLevel(this.lvl + 1); // remember where to continue next visit
 
     const nextCfg = LEVELS[this.lvl];
     this.add.text(CW / 2, 314, `Next: ${nextCfg.title} — "${nextCfg.sub}"`, {
@@ -1333,13 +1439,21 @@ class WinScene extends Phaser.Scene {
       });
     }
 
-    const play = this.add.text(CW / 2, 448, 'PLAY AGAIN', {
+    const play = this.add.text(CW / 2, 430, 'PLAY AGAIN', {
       fontSize: '26px', fill: '#000', fontFamily: 'Courier New', fontStyle: 'bold',
       backgroundColor: '#ffcc00', padding: { x: 24, y: 14 },
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
     play.on('pointerover', () => play.setStyle({ fill: '#333' }));
     play.on('pointerdown', () => { window._musicPlaying = false; this.scene.start('Menu'); });
     this.input.keyboard.on('keydown-ENTER', () => { window._musicPlaying = false; this.scene.start('Menu'); });
+
+    const replay = this.add.text(CW / 2, 508, '◄◄ WATCH REPLAY ×5', {
+      fontSize: '17px', fill: '#aaffaa', fontFamily: 'Courier New', fontStyle: 'bold',
+      backgroundColor: '#0a1a0a', padding: { x: 18, y: 10 },
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    replay.on('pointerover', () => replay.setStyle({ fill: '#ffffff' }));
+    replay.on('pointerout',  () => replay.setStyle({ fill: '#aaffaa' }));
+    replay.on('pointerdown', () => this.scene.start('Game', { level: 1, replay: true }));
   }
 }
 
