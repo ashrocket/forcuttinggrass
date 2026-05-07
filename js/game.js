@@ -13,7 +13,10 @@ const LAWN_Y  = TITLE_H;
 const LAWN_W  = GRID_W * TILE;
 const LAWN_H  = GRID_H * TILE;
 const HUD_Y   = LAWN_Y + LAWN_H;
-const HUD_H   = CH - HUD_Y;
+const HUD_H   = 80;
+const CTRL_Y  = CH;
+const CTRL_H  = 140;
+const TOTAL_H = CH + CTRL_H;
 
 // ─── Tile types ──────────────────────────────────────────────────
 const T_TALL   = 0;
@@ -53,8 +56,8 @@ function setWon() {
 // ─── Level configs ────────────────────────────────────────────────
 const LEVELS = [
   {
-    n: 1, title: 'LEVEL 1', sub: 'FRESH CUT',
-    desc: 'Mow the lawn. Simple.',
+    n: 1, title: 'LEVEL 1', sub: 'THE HOUSE NEXT DOOR',
+    desc: 'Mow around the house and garden.',
     gasMax: 600, gasDrain: 0.10,
     cans: 0, stumps: 0, crickets: 0, dogs: 0, cricketMs: 0,
     win: 0.80,
@@ -201,7 +204,7 @@ class MenuScene extends Phaser.Scene {
       }
     }
 
-    const panel = this.add.rectangle(CW / 2, CH / 2 - 70, 540, 220, 0x000000, 0.88);
+    const panel = this.add.rectangle(CW / 2, CH / 2 - 15, 480, 320, 0x000000, 0.88);
     panel.setStrokeStyle(4, C_MOWER);
 
     this.add.text(CW / 2, CH / 2 - 170, 'GRASS CUTTER', {
@@ -219,27 +222,27 @@ class MenuScene extends Phaser.Scene {
       fontSize: '13px', fill: spColor, fontFamily: 'Courier New',
     }).setOrigin(0.5);
 
-    const go = this.add.text(CW / 2, CH / 2 - 40, 'CLICK OR PRESS ENTER TO START', {
-      fontSize: '20px', fill: '#fff', fontFamily: 'Courier New', fontStyle: 'bold',
-    }).setOrigin(0.5);
-    this.tweens.add({ targets: go, alpha: 0.1, duration: 550, yoyo: true, repeat: -1 });
-
-    this.add.text(CW / 2, CH / 2 + 20, 'SELECT LEVEL', {
+    this.add.text(CW / 2, CH / 2 - 125, 'SELECT LEVEL', {
       fontSize: '13px', fill: '#aaa', fontFamily: 'Courier New',
     }).setOrigin(0.5);
 
     const saved = getSavedLevel();
+    const LEVEL_LABELS = ['HOUSE', 'GAS', 'STUMPS', 'BUGS', 'FINAL'];
 
     for (let i = 0; i < 5; i++) {
-      const bx = CW / 2 - 100 + i * 50;
-      const by = CH / 2 + 55;
+      const bx = CW / 2 - 160 + i * 80;
+      const by = CH / 2 - 75;
       const isSaved = (i + 1 === saved && saved > 1);
-      const box = this.add.rectangle(bx, by, 40, 40, isSaved ? 0x224422 : 0x111111)
+      const box = this.add.rectangle(bx, by, 50, 50, isSaved ? 0x224422 : 0x111111)
         .setStrokeStyle(isSaved ? 3 : 2, isSaved ? 0xffcc00 : C_MOWER)
         .setInteractive({ useHandCursor: true });
-      const lbl = this.add.text(bx, by, `${i + 1}`, {
-        fontSize: '18px', fill: isSaved ? '#ffcc00' : '#fff',
+      const lbl = this.add.text(bx, by - 2, `${i + 1}`, {
+        fontSize: '22px', fill: isSaved ? '#ffcc00' : '#fff',
         fontFamily: 'Courier New', fontStyle: 'bold',
+      }).setOrigin(0.5);
+      this.add.text(bx, by + 36, LEVEL_LABELS[i], {
+        fontSize: '9px', fill: isSaved ? '#ffcc00' : '#666',
+        fontFamily: 'Courier New',
       }).setOrigin(0.5);
       box.on('pointerover', () => { box.setFillStyle(0x334433); lbl.setStyle({ fill: '#ffcc00' }); });
       box.on('pointerout',  () => { box.setFillStyle(isSaved ? 0x224422 : 0x111111); lbl.setStyle({ fill: isSaved ? '#ffcc00' : '#fff' }); });
@@ -247,12 +250,19 @@ class MenuScene extends Phaser.Scene {
     }
 
     if (saved > 1) {
-      this.add.text(CW / 2, CH / 2 + 95, `► CONTINUE FROM LEVEL ${saved}`, {
-        fontSize: '14px', fill: '#ffcc00', fontFamily: 'Courier New', fontStyle: 'bold',
+      const btn = this.add.text(CW / 2, CH / 2 + 30, 'CONTINUE', {
+        fontSize: '30px', fill: '#000', fontFamily: 'Courier New', fontStyle: 'bold',
+        backgroundColor: '#ffcc00', padding: { x: 32, y: 14 },
+      }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+      btn.on('pointerover', () => btn.setStyle({ fill: '#333' }));
+      btn.on('pointerout',  () => btn.setStyle({ fill: '#000' }));
+      btn.on('pointerdown', () => this._start(saved));
+      this.add.text(CW / 2, CH / 2 + 82, `Level ${saved}`, {
+        fontSize: '13px', fill: '#888', fontFamily: 'Courier New',
       }).setOrigin(0.5);
     }
 
-    this._menuMower = this._makeMiniMower(-64, CH / 2 + 120);
+    this._menuMower = this._makeMiniMower(-64, CH / 2 + 130);
     this.tweens.add({
       targets: this._menuMower,
       x: CW + 64, duration: 3800, repeat: -1,
@@ -261,9 +271,6 @@ class MenuScene extends Phaser.Scene {
 
     this.input.keyboard.on('keydown-ENTER', () => this._start(saved));
     this.input.keyboard.on('keydown-SPACE', () => this._start(saved));
-    this.input.on('pointerdown', (ptr) => {
-      if (ptr.y < CH / 2 + 30 || ptr.y > CH / 2 + 100) this._start(saved);
-    });
   }
 
   _start(n) {
@@ -1198,62 +1205,90 @@ class GameScene extends Phaser.Scene {
     });
   }
 
-  // ── virtual joystick + dig button for mobile ────────────────────
+  // ── control zone: joystick (left) + dig button (right) ──────────
   _buildJoystick() {
-    const joyR = 50;
+    const PAD   = 10;
+    const joyR  = 44;
+    const JOY_X1 = PAD, JOY_X2 = CW * 0.54, JOY_W = JOY_X2 - JOY_X1;
+    const DIG_X1 = CW * 0.57, DIG_X2 = CW - PAD, DIG_W = DIG_X2 - DIG_X1;
+    const ZONE_Y = CTRL_Y + PAD, ZONE_H = CTRL_H - PAD * 2;
+    const JOY_CX = JOY_X1 + JOY_W / 2, JOY_CY = ZONE_Y + ZONE_H / 2;
+    const DIG_CX = DIG_X1 + DIG_W / 2, DIG_CY = ZONE_Y + ZONE_H / 2;
+
+    // ── Joystick zone background ────────────────────────────────
+    const joyBg = this.add.graphics().setDepth(48).setScrollFactor(0);
+    const _drawJoyIdle = () => {
+      joyBg.clear();
+      joyBg.fillStyle(0xffffff, 0.04);
+      joyBg.fillRoundedRect(JOY_X1, ZONE_Y, JOY_W, ZONE_H, 14);
+      joyBg.lineStyle(1.5, 0xffffff, 0.12);
+      joyBg.strokeRoundedRect(JOY_X1, ZONE_Y, JOY_W, ZONE_H, 14);
+    };
+    _drawJoyIdle();
+    const moveLbl = this.add.text(JOY_CX, JOY_CY, 'MOVE', {
+      fontSize: '11px', fill: '#fff', fontFamily: 'Courier New',
+    }).setOrigin(0.5).setDepth(49).setScrollFactor(0).setAlpha(0.2);
+
+    // Active ring + knob
     const ring = this.add.graphics().setDepth(50).setScrollFactor(0).setAlpha(0);
-    ring.lineStyle(3, 0xffffff, 0.5); ring.strokeCircle(0, 0, joyR);
-    const knob = this.add.circle(0, 0, 20, 0xffffff, 0).setDepth(51).setScrollFactor(0);
+    ring.lineStyle(3, 0xffffff, 0.7); ring.strokeCircle(0, 0, joyR);
+    const knob = this.add.graphics().setDepth(51).setScrollFactor(0).setAlpha(0);
+    knob.fillStyle(0xffffff, 0.25); knob.fillCircle(0, 0, 22);
+    knob.lineStyle(2, 0xffffff, 0.6); knob.strokeCircle(0, 0, 22);
 
-    let sx = 0, sy = 0;
-    let joyPtrId = -1;
-    let digPtrId = -1;
-
-    // ── DIG button (right side, only when stumps exist) ──────────
-    const digBtnX = CW - 72;
-    const digBtnY = LAWN_Y + LAWN_H * 0.72;
-    const digR    = 44;
-    let   digBg   = null;
-    let   digLbl  = null;
+    // ── DIG zone (only if level has stumps) ─────────────────────
+    let digBg = null, digLbl = null;
+    const _drawDigIdle = () => {
+      if (!digBg) return;
+      digBg.clear();
+      digBg.fillStyle(0xffffff, 0.05);
+      digBg.fillRoundedRect(DIG_X1, ZONE_Y, DIG_W, ZONE_H, 14);
+      digBg.lineStyle(1.5, 0xffcc00, 0.3);
+      digBg.strokeRoundedRect(DIG_X1, ZONE_Y, DIG_W, ZONE_H, 14);
+    };
+    const _drawDigActive = () => {
+      if (!digBg) return;
+      digBg.clear();
+      digBg.fillStyle(0xffcc00, 0.18);
+      digBg.fillRoundedRect(DIG_X1, ZONE_Y, DIG_W, ZONE_H, 14);
+      digBg.lineStyle(2.5, 0xffcc00, 0.85);
+      digBg.strokeRoundedRect(DIG_X1, ZONE_Y, DIG_W, ZONE_H, 14);
+    };
 
     if (this.cfg.stumps > 0) {
-      digBg = this.add.graphics().setDepth(50).setScrollFactor(0);
-      digBg.fillStyle(0xffffff, 0.15);
-      digBg.fillCircle(digBtnX, digBtnY, digR);
-      digBg.lineStyle(3, 0xffffff, 0.45);
-      digBg.strokeCircle(digBtnX, digBtnY, digR);
-
-      digLbl = this.add.text(digBtnX, digBtnY, 'DIG', {
-        fontSize: '16px', fill: '#fff', fontFamily: 'Courier New',
-        fontStyle: 'bold', align: 'center',
-      }).setOrigin(0.5, 0.5).setDepth(51).setScrollFactor(0).setAlpha(0.65);
+      digBg = this.add.graphics().setDepth(48).setScrollFactor(0);
+      _drawDigIdle();
+      digLbl = this.add.text(DIG_CX, DIG_CY, 'DIG', {
+        fontSize: '18px', fill: '#ffcc00', fontFamily: 'Courier New', fontStyle: 'bold',
+      }).setOrigin(0.5).setDepth(49).setScrollFactor(0).setAlpha(0.55);
     }
 
-    const _inDig = (px, py) =>
-      digBg && Math.sqrt((px - digBtnX) ** 2 + (py - digBtnY) ** 2) <= digR + 10;
+    let sx = JOY_CX, sy = JOY_CY;
+    let joyPtrId = -1, digPtrId = -1;
+
+    const _inJoy = (px, py) => px >= JOY_X1 && px <= JOY_X2 && py >= ZONE_Y && py <= ZONE_Y + ZONE_H;
+    const _inDig = (px, py) => digBg && px >= DIG_X1 && px <= DIG_X2 && py >= ZONE_Y && py <= ZONE_Y + ZONE_H;
 
     this.input.on('pointerdown', (ptr) => {
-      // DIG button — right side
       if (_inDig(ptr.x, ptr.y)) {
         digPtrId = ptr.id;
         this._touch.digging = true;
-        if (digBg) digBg.clear(),
-          digBg.fillStyle(0xffffff, 0.35),
-          digBg.fillCircle(digBtnX, digBtnY, digR),
-          digBg.lineStyle(3, 0xffcc00, 0.8),
-          digBg.strokeCircle(digBtnX, digBtnY, digR);
-        if (digLbl) digLbl.setStyle({ fill: '#ffcc00' });
+        _drawDigActive();
+        if (digLbl) digLbl.setAlpha(1);
         return;
       }
-      // Joystick — left 60% of play area
-      if (ptr.x > CW * 0.6 || ptr.y < LAWN_Y || ptr.y > HUD_Y) return;
+      if (!_inJoy(ptr.x, ptr.y)) return;
       joyPtrId = ptr.id;
-      sx = ptr.x; sy = ptr.y;
+      sx = Phaser.Math.Clamp(ptr.x, JOY_X1 + joyR, JOY_X2 - joyR);
+      sy = Phaser.Math.Clamp(ptr.y, ZONE_Y + joyR, ZONE_Y + ZONE_H - joyR);
       this._touch.active = true;
-      this._touch.startX = sx; this._touch.startY = sy;
       this._touch.dx = 0; this._touch.dy = 0;
       ring.setPosition(sx, sy).setAlpha(1);
-      knob.setPosition(sx, sy).setAlpha(0.45);
+      knob.setPosition(sx, sy).setAlpha(1);
+      moveLbl.setAlpha(0);
+      joyBg.clear();
+      joyBg.fillStyle(0xffffff, 0.07);
+      joyBg.fillRoundedRect(JOY_X1, ZONE_Y, JOY_W, ZONE_H, 14);
     });
 
     this.input.on('pointermove', (ptr) => {
@@ -1271,16 +1306,14 @@ class GameScene extends Phaser.Scene {
         this._touch.active = false;
         this._touch.dx = 0; this._touch.dy = 0;
         ring.setAlpha(0); knob.setAlpha(0);
+        moveLbl.setAlpha(0.2);
+        _drawJoyIdle();
       }
       if (ptr.id === digPtrId) {
         digPtrId = -1;
         this._touch.digging = false;
-        if (digBg) digBg.clear(),
-          digBg.fillStyle(0xffffff, 0.15),
-          digBg.fillCircle(digBtnX, digBtnY, digR),
-          digBg.lineStyle(3, 0xffffff, 0.45),
-          digBg.strokeCircle(digBtnX, digBtnY, digR);
-        if (digLbl) digLbl.setStyle({ fill: '#fff' });
+        _drawDigIdle();
+        if (digLbl) digLbl.setAlpha(0.55);
       }
     });
   }
@@ -1343,6 +1376,7 @@ class GameScene extends Phaser.Scene {
 
   _buildHUD() {
     this.add.rectangle(CW / 2, HUD_Y + HUD_H / 2, CW, HUD_H, C_HUD_BG, 0.90).setDepth(20);
+    this.add.rectangle(CW / 2, CTRL_Y + CTRL_H / 2, CW, CTRL_H, 0x080808, 1.0).setDepth(20);
 
     // Row 1 ── gas bar
     this.add.text(10, HUD_Y + 16, 'GAS:', {
@@ -1782,7 +1816,7 @@ function _drawDog(g) {
 const PHASER_CONFIG = {
   type: Phaser.AUTO,
   width:  CW,
-  height: CH,
+  height: TOTAL_H,
   parent: 'game-container',
   backgroundColor: '#111',
   scene: [BootScene, MenuScene, GameScene, LevelCompleteScene, GameOverScene, WinScene],

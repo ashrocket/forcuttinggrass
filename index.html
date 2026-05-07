@@ -121,6 +121,12 @@
     </div>
   </div>
 
+  <div id="landscape-hint">
+    <div class="icon">&#8635;</div>
+    <strong style="font-size:22px;letter-spacing:3px;">ROTATE DEVICE</strong>
+    <p>GRASS CUTTER plays best in landscape</p>
+  </div>
+
   <div id="game-container"></div>
 
   <script>
@@ -132,13 +138,52 @@
       document.getElementById('spotify-overlay').classList.add('hidden');
       window._gameReady = true;
     }
+    function handleBack() {
+      const gi = window._gameInstance;
+      const inGame = gi && ['Game','LevelComplete','GameOver','Win'].some(k => gi.scene.isActive(k));
+      if (inGame) {
+        window._musicPlaying = false;
+        if (window._spotifyConnected && window.SpotifyPlayer) SpotifyPlayer.pause();
+        gi.scene.start('Menu');
+      } else {
+        window.location.href = 'https://bandmusicgames.party';
+      }
+    }
   </script>
+
+  <style>
+    #landscape-hint {
+      display: none;
+      position: fixed; inset: 0; z-index: 10000;
+      background: #000;
+      flex-direction: column;
+      align-items: center; justify-content: center;
+      color: #ffcc00;
+      font-family: 'Courier New', monospace;
+      text-align: center;
+      gap: 18px;
+    }
+    #landscape-hint.show { display: flex; }
+    #landscape-hint .icon { font-size: 52px; }
+    #landscape-hint p { font-size: 16px; color: #aaa; }
+  </style>
 
   <script src="https://sdk.scdn.co/spotify-player.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
   <script src="config.js"></script>
   <script src="js/spotify.js"></script>
   <script src="js/game.js"></script>
-<a href="https://bandmusicgames.party" style="position:fixed;bottom:16px;right:16px;z-index:9999;padding:8px 16px;background:linear-gradient(135deg,#a855f7,#ec4899);color:#fff;border-radius:20px;font-size:11px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-weight:700;letter-spacing:0.1em;text-decoration:none;box-shadow:0 4px 12px rgba(168,85,247,0.4);">← LOBBY</a>
+<button onclick="handleBack()" style="position:fixed;bottom:16px;right:16px;z-index:9999;padding:8px 18px;background:linear-gradient(135deg,#a855f7,#ec4899);color:#fff;border:none;border-radius:20px;font-size:12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-weight:700;letter-spacing:0.1em;cursor:pointer;box-shadow:0 4px 12px rgba(168,85,247,0.4);">&#8592; Back</button>
+<script>
+  // Landscape hint for portrait mobile
+  const _isMobileTouch = window.matchMedia('(pointer: coarse)').matches;
+  function _checkOrientation() {
+    if (!_isMobileTouch) return;
+    const portrait = window.innerHeight > window.innerWidth;
+    document.getElementById('landscape-hint').classList.toggle('show', portrait);
+  }
+  window.addEventListener('resize', _checkOrientation);
+  _checkOrientation();
+</script>
 </body>
 </html>
