@@ -16,9 +16,11 @@ const HUD_Y   = LAWN_Y + LAWN_H;
 const HUD_H   = CH - HUD_Y;
 
 // ─── Tile types ──────────────────────────────────────────────────
-const T_TALL  = 0;
-const T_CUT   = 1;
-const T_STUMP = 2;
+const T_TALL   = 0;
+const T_CUT    = 1;
+const T_STUMP  = 2;
+const T_HOUSE  = 3;  // impassable house footprint (level 1)
+const T_GARDEN = 4;  // passable garden / porch bed (not mowable)
 
 // ─── Colors ──────────────────────────────────────────────────────
 const C_GRASS_TALL  = 0x2d7a2d;
@@ -320,9 +322,11 @@ class GameScene extends Phaser.Scene {
     SFX.init();
 
     this.grid = Array.from({ length: GRID_H }, () => new Array(GRID_W).fill(T_TALL));
+    if (this.lvlNum === 1) this._initLevel1Layout();
 
     this._buildBackdrop();
     this.lawnGfx = this.add.graphics().setDepth(0);
+    if (this.lvlNum === 1) this._buildLevel1Scenery();
 
     this.cans     = [];
     this.stumps   = [];
@@ -333,7 +337,11 @@ class GameScene extends Phaser.Scene {
     this._placeCrickets();
     this._placeDogs();
 
-    this.totalMow = GRID_W * GRID_H - this.stumps.length;
+    let _mow = 0;
+    for (let _gy = 0; _gy < GRID_H; _gy++)
+      for (let _gx = 0; _gx < GRID_W; _gx++)
+        if (this.grid[_gy][_gx] === T_TALL || this.grid[_gy][_gx] === T_STUMP) _mow++;
+    this.totalMow = _mow;
     this.wideTimer = 0; // seconds remaining for double-wide power-up
 
     if (this.replay) {
@@ -346,6 +354,7 @@ class GameScene extends Phaser.Scene {
 
     this.mx = LAWN_W / 2;
     this.my = LAWN_Y + LAWN_H / 2;
+    if (this.lvlNum === 1) this.my = LAWN_Y + 10 * TILE + TILE / 2; // start in open yard
     this._buildMower();
 
     this._buildTitleBar();
@@ -361,6 +370,10 @@ class GameScene extends Phaser.Scene {
       right: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D),
     };
     this.spKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+
+    // ── Touch joystick ──────────────────────────────────────────
+    this._touch = { active: false, startX: 0, startY: 0, dx: 0, dy: 0 };
+    this._buildJoystick();
   }
 
   // ── update ──────────────────────────────────────────────────────
@@ -423,6 +436,12 @@ class GameScene extends Phaser.Scene {
     if (this.cur.right.isDown || this.wasd.right.isDown) dx =  1;
     if (this.cur.up.isDown    || this.wasd.up.isDown)    dy = -1;
     if (this.cur.down.isDown  || this.wasd.down.isDown)  dy =  1;
+    // Touch/joystick override
+    if (this._touch.active && (Math.abs(this._touch.dx) > 8 || Math.abs(this._touch.dy) > 8)) {
+      const td = Math.sqrt(this._touch.dx ** 2 + this._touch.dy ** 2);
+      dx = this._touch.dx / td;
+      dy = this._touch.dy / td;
+    }
 
     if (dx === 0 && dy === 0) {
       if (this.moving) { SFX.stopMow(); this.moving = false; }
@@ -505,7 +524,7 @@ class GameScene extends Phaser.Scene {
       const tx = Math.floor(cx / TILE);
       const ty = Math.floor(cy / TILE);
       if (tx < 0 || tx >= GRID_W || ty < 0 || ty >= GRID_H) return true;
-      if (this.grid[ty][tx] === T_STUMP) return true;
+      if (this.grid[ty][tx] === T_STUMP || this.grid[ty][tx] === T_HOUSE) return true;
     }
     return false;
   }
@@ -1049,6 +1068,161 @@ class GameScene extends Phaser.Scene {
     this.cameras.main.shake(duration, strength);
   }
 
+  // ── level 1 layout + scenery ─────────────────────────────────────
+  _initLevel1Layout() {
+    // House: cols 6-24, rows 0-6 (blocked)
+    for (let gy = 0; gy <= 6; gy++)
+      for (let gx = 6; gx <= 24; gx++)
+        this.grid[gy][gx] = T_HOUSE;
+    // Side garden: cols 0-5, rows 0-7 (passable, not mowable)
+    for (let gy = 0; gy <= 7; gy++)
+      for (let gx = 0; gx <= 5; gx++)
+        this.grid[gy][gx] = T_GARDEN;
+    // Porch / flower bed: row 7, cols 6-24
+    for (let gx = 6; gx <= 24; gx++)
+      this.grid[7][gx] = T_GARDEN;
+  }
+
+  _buildLevel1Scenery() {
+    const sc = this.add.graphics().setDepth(2);
+
+    // ── House (cols 6-24, rows 0-6 → x=192–800, y=40–264) ──────
+    const HX = 6 * TILE, HY = LAWN_Y, HW = 19 * TILE, HH = 7 * TILE;
+
+    sc.fillStyle(0x2a2a2a); sc.fillRect(HX, HY, HW, HH);
+
+    // Roof (fills upper portion)
+    sc.fillStyle(0x6e1a1a); sc.fillRect(HX + 4, HY + 4, HW - 8, HH - 40);
+    sc.lineStyle(1, 0x4c0a0a, 0.5);
+    for (let sy = 0; sy < 7; sy++)
+      sc.lineBetween(HX + 4, HY + 4 + sy * 26, HX + HW - 4, HY + 4 + sy * 26);
+    sc.lineStyle(3, 0x3a0808);
+    sc.lineBetween(HX + 4, HY + HH / 2 - 24, HX + HW - 4, HY + HH / 2 - 24);
+
+    // Chimney tops
+    const chimneys = [[HX + 60, HY + 20], [HX + 240, HY + 16], [HX + 440, HY + 20]];
+    for (const [cx, cy] of chimneys) {
+      sc.fillStyle(0x9c5050); sc.fillRect(cx, cy, 18, 18);
+      sc.lineStyle(1, 0x5c1818); sc.strokeRect(cx, cy, 18, 18);
+      sc.fillStyle(0x1a1010); sc.fillCircle(cx + 9, cy + 9, 5);
+    }
+
+    // Front facade (bottom strip facing the yard)
+    sc.fillStyle(0xeedad8); sc.fillRect(HX, HY + HH - 36, HW, 36);
+    sc.lineStyle(2, 0xc0a8a6); sc.strokeRect(HX, HY + HH - 36, HW, 36);
+    sc.lineStyle(1, 0xd0b8b6, 0.4);
+    for (let sl = 0; sl < 3; sl++)
+      sc.lineBetween(HX, HY + HH - 36 + sl * 12, HX + HW, HY + HH - 36 + sl * 12);
+
+    // Front windows
+    const wY = HY + HH - 30;
+    for (const wx of [HX + 40, HX + 120, HX + 200, HX + 370, HX + 450, HX + 530]) {
+      sc.fillStyle(0x88c8e8); sc.fillRect(wx, wY, 26, 20);
+      sc.lineStyle(1, 0x4488a8); sc.strokeRect(wx, wY, 26, 20);
+      sc.lineStyle(1, 0x66aacc);
+      sc.lineBetween(wx + 13, wY, wx + 13, wY + 20);
+      sc.lineBetween(wx, wY + 10, wx + 26, wY + 10);
+    }
+
+    // Front door
+    const dX = HX + HW / 2 - 14;
+    sc.fillStyle(0x5c2808); sc.fillRect(dX, HY + HH - 34, 28, 32);
+    sc.lineStyle(2, 0x3a1800); sc.strokeRect(dX, HY + HH - 34, 28, 32);
+    sc.fillStyle(0xddaa00); sc.fillCircle(dX + 22, HY + HH - 18, 2.5);
+
+    // ── Porch / flower bed (row 7: y=264–296) ───────────────────
+    const PY = LAWN_Y + 7 * TILE;
+    sc.fillStyle(0xc8aa80); sc.fillRect(HX, PY, HW, TILE);
+    sc.lineStyle(1, 0xa88860, 0.35);
+    for (let pv = 0; pv <= 19; pv++) sc.lineBetween(HX + pv * TILE, PY, HX + pv * TILE, PY + TILE);
+    sc.lineBetween(HX, PY + 16, HX + HW, PY + 16);
+    const pal = [0xff6688, 0xffee44, 0xff88ee, 0x66ddff, 0xff9933, 0xaaffaa];
+    let fi = 0;
+    for (let fx = HX + 24; fx < HX + HW - 20; fx += 44) {
+      const fc = pal[fi++ % pal.length];
+      sc.lineStyle(2, 0x228822); sc.lineBetween(fx, PY + TILE - 2, fx, PY + 11);
+      sc.fillStyle(fc);
+      for (let p = 0; p < 5; p++) {
+        const a = (p / 5) * Math.PI * 2;
+        sc.fillCircle(fx + Math.cos(a) * 4, PY + 9 + Math.sin(a) * 4, 3);
+      }
+      sc.fillStyle(0xffee00); sc.fillCircle(fx, PY + 9, 2.5);
+    }
+
+    // ── Side garden (cols 0-5, rows 0-7 → x=0–192, y=40–296) ───
+    const GW = 6 * TILE, GH = 8 * TILE;
+    sc.fillStyle(0x3a1e0a); sc.fillRect(0, LAWN_Y, GW, GH);
+    const cc = [0x44aa22, 0x88aa44, 0xaaaa22, 0x44aaaa, 0xaa6622, 0x66aa44, 0xaa44aa, 0x22aaaa];
+    for (let cr = 0; cr < 8; cr++) {
+      const cY = LAWN_Y + cr * 32 + 6;
+      sc.fillStyle(0x2a1205, 0.7); sc.fillRect(4, cY, GW - 8, 20);
+      for (let cp = 0; cp < 4; cp++) {
+        const cX = 18 + cp * 40;
+        sc.fillStyle(cc[cr % cc.length]); sc.fillCircle(cX, cY + 10, 6);
+        sc.fillStyle(cc[cr % cc.length], 0.5);
+        sc.fillCircle(cX - 5, cY + 14, 4); sc.fillCircle(cX + 5, cY + 14, 4);
+      }
+    }
+    sc.lineStyle(3, 0x8b5a1a); sc.strokeRect(2, LAWN_Y + 2, GW - 4, GH - 4);
+    sc.fillStyle(0x7a4a10);
+    for (let gp = 0; gp <= 8; gp++) sc.fillRect(2, LAWN_Y + 2 + gp * 31, 5, 8);
+    for (let gp = 0; gp <= 8; gp++) sc.fillRect(GW - 7, LAWN_Y + 2 + gp * 31, 5, 8);
+    for (let gp = 0; gp <= 4; gp++) sc.fillRect(2 + gp * 46, LAWN_Y + 2, 5, 8);
+    for (let gp = 0; gp <= 4; gp++) sc.fillRect(2 + gp * 46, LAWN_Y + GH - 10, 5, 8);
+
+    // ── Animated chimney smoke ───────────────────────────────────
+    chimneys.forEach(([sx, sy]) => {
+      this.time.addEvent({
+        delay: Phaser.Math.Between(600, 1100), repeat: -1,
+        callback: () => {
+          if (this.state === 'over' || this.state === 'won') return;
+          const p = this.add.circle(sx + 9, sy, Phaser.Math.Between(2, 4), 0xc0c0c0, 0.4).setDepth(3);
+          this.tweens.add({
+            targets: p, y: sy - Phaser.Math.Between(14, 22), x: p.x + Phaser.Math.Between(-3, 3),
+            alpha: 0, scaleX: 1.8, scaleY: 1.8, duration: 1700,
+            onComplete: () => p.destroy(),
+          });
+        },
+      });
+    });
+  }
+
+  // ── virtual joystick for mobile ──────────────────────────────────
+  _buildJoystick() {
+    const joyR = 50;
+    // Ring: drawn at local (0,0), repositioned via setPosition
+    const ring = this.add.graphics().setDepth(50).setScrollFactor(0).setAlpha(0);
+    ring.lineStyle(3, 0xffffff, 0.5); ring.strokeCircle(0, 0, joyR);
+    const knob = this.add.circle(0, 0, 20, 0xffffff, 0).setDepth(51).setScrollFactor(0);
+
+    let sx = 0, sy = 0;
+
+    this.input.on('pointerdown', (ptr) => {
+      if (ptr.x > CW * 0.6 || ptr.y < LAWN_Y || ptr.y > HUD_Y) return;
+      sx = ptr.x; sy = ptr.y;
+      this._touch.active = true;
+      this._touch.startX = sx; this._touch.startY = sy;
+      this._touch.dx = 0; this._touch.dy = 0;
+      ring.setPosition(sx, sy).setAlpha(1);
+      knob.setPosition(sx, sy).setAlpha(0.45);
+    });
+
+    this.input.on('pointermove', (ptr) => {
+      if (!this._touch.active) return;
+      const dx = ptr.x - sx, dy = ptr.y - sy;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const cl = Math.min(dist, joyR);
+      knob.setPosition(sx + (dx / (dist || 1)) * cl, sy + (dy / (dist || 1)) * cl);
+      this._touch.dx = dx; this._touch.dy = dy;
+    });
+
+    this.input.on('pointerup', () => {
+      this._touch.active = false;
+      this._touch.dx = 0; this._touch.dy = 0;
+      ring.setAlpha(0); knob.setAlpha(0);
+    });
+  }
+
   // ── per-level backdrop ───────────────────────────────────────────
   _buildBackdrop() {
     // Drawn at depth 19, visible through semi-transparent title/HUD bars at depth 20
@@ -1066,12 +1240,11 @@ class GameScene extends Phaser.Scene {
 
     // Small thematic icon at right edge of title bar
     if (n === 1) {
-      g.fillStyle(0xffee44, 0.6); g.fillCircle(CW - 20, 20, 11);
-      g.fillStyle(0xffcc00, 0.3);
-      for (let i = 0; i < 8; i++) {
-        const a = (i / 8) * Math.PI * 2;
-        g.fillRect(CW - 20 + Math.cos(a) * 14 - 1, 20 + Math.sin(a) * 14 - 1, 3, 3);
-      }
+      // Mini house silhouette in title bar
+      g.fillStyle(0xeedad8, 0.65); g.fillRect(CW - 32, 14, 22, 20);
+      g.fillStyle(0x7a2020, 0.7);  g.fillTriangle(CW - 21, 8, CW - 34, 16, CW - 8, 16);
+      g.fillStyle(0x5c2808, 0.65); g.fillRect(CW - 26, 26, 8, 8);
+      g.fillStyle(0x44aa22, 0.55); g.fillCircle(CW - 44, 20, 5); g.fillCircle(CW - 44, 28, 4);
     } else if (n === 2) {
       g.fillStyle(C_GAS_CAN, 0.5); g.fillRect(CW - 30, 10, 18, 22);
       g.fillStyle(0xffcc00, 0.5);  g.fillRect(CW - 25, 6, 8, 6);
@@ -1222,7 +1395,9 @@ class GameScene extends Phaser.Scene {
         const y = LAWN_Y + gy * TILE;
         const t = this.grid[gy][gx];
 
-        if (t === T_TALL) {
+        if (t === T_HOUSE || t === T_GARDEN) {
+          // drawn by level scenery — skip
+        } else if (t === T_TALL) {
           this.lawnGfx.fillStyle(C_GRASS_TALL);
           this.lawnGfx.fillRect(x, y, TILE, TILE);
           this.lawnGfx.fillStyle(C_GRASS_BLADE);
