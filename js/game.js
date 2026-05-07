@@ -71,7 +71,7 @@ const LEVELS = [
     n: 4, title: 'LEVEL 4', sub: 'CRICKET SEASON',
     desc: 'Crickets hop around. Hit one = lose gas!  Watch the dog!',
     gasMax: 160, gasDrain: 0.22,
-    cans: 1, stumps: 2, crickets: 2, dogs: 1, cricketMs: 1200,
+    cans: 2, stumps: 2, crickets: 2, dogs: 1, cricketMs: 1200,
     win: 0.85,
   },
   {
