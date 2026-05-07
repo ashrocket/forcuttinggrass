@@ -78,7 +78,7 @@ const LEVELS = [
     n: 5, title: 'LEVEL 5', sub: 'THE FINAL YARD',
     desc: 'Everything at once. Good luck.',
     gasMax: 140, gasDrain: 0.25,
-    cans: 2, stumps: 3, crickets: 3, dogs: 1, cricketMs: 750,
+    cans: 3, stumps: 3, crickets: 3, dogs: 1, cricketMs: 750,
     win: 0.90,
   },
 ];
