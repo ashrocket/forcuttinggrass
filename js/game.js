@@ -63,7 +63,7 @@ const LEVELS = [
     n: 2, title: 'LEVEL 2', sub: 'RUNNING ON FUMES',
     desc: 'Gas runs out — find the gas can!',
     gasMax: 200, gasDrain: 0.18,
-    cans: 1, stumps: 0, crickets: 0, dogs: 0, cricketMs: 0,
+    cans: 2, stumps: 0, crickets: 0, dogs: 0, cricketMs: 0,
     win: 0.80,
   },
   {

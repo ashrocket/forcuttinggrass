@@ -85,6 +85,14 @@ const SpotifyPlayer = {
     this._player.on('authentication_error', e  => console.error('[Spotify] auth error:', e.message));
     this._player.on('account_error',        e  => console.error('[Spotify] account error (Premium required):', e.message));
 
+    this._player.on('player_state_changed', state => {
+      if (!state || !window._musicPlaying) return;
+      // Track ended: paused at position 0 after having been playing
+      if (state.paused && state.position === 0 && !state.loading) {
+        SpotifyPlayer.play();
+      }
+    });
+
     await this._player.connect();
   },
 
