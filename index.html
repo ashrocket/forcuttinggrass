@@ -29,73 +29,80 @@
       color: #fff;
     }
     #spotify-overlay.hidden { display: none; }
-
     .overlay-title {
-      font-size: 60px;
-      font-weight: bold;
-      color: #ffcc00;
+      font-size: 60px; font-weight: bold; color: #ffcc00;
       text-shadow: 4px 4px 0 #000, -1px -1px 0 #000;
-      letter-spacing: 4px;
-      margin-bottom: 8px;
+      letter-spacing: 4px; margin-bottom: 8px;
     }
-    .overlay-sub {
-      font-size: 16px;
-      color: #8bc44a;
-      letter-spacing: 3px;
-      margin-bottom: 40px;
-    }
+    .overlay-sub { font-size: 16px; color: #8bc44a; letter-spacing: 3px; margin-bottom: 40px; }
     .overlay-box {
-      background: rgba(0,0,0,0.7);
-      border: 3px solid #1DB954;
-      padding: 32px 48px;
-      text-align: center;
-      max-width: 480px;
+      background: rgba(0,0,0,0.7); border: 3px solid #1DB954;
+      padding: 32px 48px; text-align: center; max-width: 480px;
     }
-    .overlay-box p {
-      font-size: 15px;
-      line-height: 1.7;
-      color: #ccc;
-      margin-bottom: 28px;
-    }
+    .overlay-box p { font-size: 15px; line-height: 1.7; color: #ccc; margin-bottom: 28px; }
     .overlay-box p strong { color: #1DB954; }
     .btn-spotify {
-      display: block;
-      background: #1DB954;
-      color: #000;
-      border: 3px solid #000;
-      box-shadow: 4px 4px 0 #000;
-      padding: 14px 36px;
-      font-size: 18px;
-      font-family: 'Courier New', monospace;
-      font-weight: bold;
-      text-transform: uppercase;
-      letter-spacing: 2px;
-      cursor: pointer;
-      width: 100%;
-      transition: transform 0.1s, box-shadow 0.1s;
-      margin-bottom: 12px;
+      display: block; background: #1DB954; color: #000; border: 3px solid #000;
+      box-shadow: 4px 4px 0 #000; padding: 14px 36px; font-size: 18px;
+      font-family: 'Courier New', monospace; font-weight: bold;
+      text-transform: uppercase; letter-spacing: 2px; cursor: pointer; width: 100%;
+      transition: transform 0.1s, box-shadow 0.1s; margin-bottom: 12px;
     }
-    .btn-spotify:hover {
-      transform: translate(-2px, -2px);
-      box-shadow: 6px 6px 0 #000;
-    }
+    .btn-spotify:hover { transform: translate(-2px,-2px); box-shadow: 6px 6px 0 #000; }
     .btn-skip {
-      background: transparent;
-      color: #555;
-      border: 2px solid #333;
-      padding: 10px 24px;
-      font-size: 13px;
-      font-family: 'Courier New', monospace;
-      cursor: pointer;
-      width: 100%;
-      transition: color 0.2s;
+      background: transparent; color: #555; border: 2px solid #333;
+      padding: 10px 24px; font-size: 13px; font-family: 'Courier New', monospace;
+      cursor: pointer; width: 100%; transition: color 0.2s;
     }
     .btn-skip:hover { color: #888; }
-    .overlay-note {
-      margin-top: 24px;
-      font-size: 11px;
-      color: #444;
-      text-align: center;
+    .overlay-note { margin-top: 24px; font-size: 11px; color: #444; text-align: center; }
+
+    /* ── Landscape hint ───────────────────────────── */
+    #landscape-hint {
+      display: none; position: fixed; inset: 0; z-index: 10000; background: #000;
+      flex-direction: column; align-items: center; justify-content: center;
+      color: #ffcc00; font-family: 'Courier New', monospace; text-align: center; gap: 18px;
+    }
+    #landscape-hint.show { display: flex; }
+    #landscape-hint .icon { font-size: 52px; }
+    #landscape-hint p { font-size: 16px; color: #aaa; }
+
+    /* ── Mobile controls (side bars in landscape) ─── */
+    #ctrl-joy, #ctrl-dig {
+      display: none;
+      position: fixed;
+      z-index: 500;
+      touch-action: none;
+      border-radius: 18px;
+      border: 1.5px solid rgba(255,255,255,0.13);
+      background: rgba(255,255,255,0.04);
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 8px;
+      -webkit-user-select: none; user-select: none;
+    }
+    #ctrl-joy.active { background: rgba(255,255,255,0.08); }
+    #ctrl-dig { border-color: rgba(255,204,0,0.25); background: rgba(255,204,0,0.04); }
+    #ctrl-dig.active { background: rgba(255,204,0,0.18); border-color: rgba(255,204,0,0.75); }
+    .ctrl-label {
+      font-family: 'Courier New', monospace; font-size: 12px; font-weight: bold;
+      pointer-events: none; letter-spacing: 1px;
+    }
+    #ctrl-joy .ctrl-label { color: rgba(255,255,255,0.25); }
+    #ctrl-dig .ctrl-label { color: rgba(255,204,0,0.45); font-size: 16px; }
+    #joy-ring {
+      width: 80px; height: 80px; border-radius: 50%;
+      border: 2.5px solid rgba(255,255,255,0.55);
+      position: absolute; pointer-events: none;
+      transform: translate(-50%,-50%); display: none;
+    }
+    #joy-knob {
+      width: 38px; height: 38px; border-radius: 50%;
+      background: rgba(255,255,255,0.22);
+      border: 2px solid rgba(255,255,255,0.5);
+      position: absolute; pointer-events: none;
+      transform: translate(-50%,-50%); display: none;
     }
   </style>
 </head>
@@ -127,6 +134,10 @@
     <p>GRASS CUTTER plays best in landscape</p>
   </div>
 
+  <!-- Mobile side-bar controls -->
+  <div id="ctrl-joy"><span class="ctrl-label">MOVE</span><div id="joy-ring"></div><div id="joy-knob"></div></div>
+  <div id="ctrl-dig"><span class="ctrl-label">DIG</span></div>
+
   <div id="game-container"></div>
 
   <script>
@@ -149,41 +160,128 @@
         window.location.href = 'https://bandmusicgames.party';
       }
     }
-  </script>
 
-  <style>
-    #landscape-hint {
-      display: none;
-      position: fixed; inset: 0; z-index: 10000;
-      background: #000;
-      flex-direction: column;
-      align-items: center; justify-content: center;
-      color: #ffcc00;
-      font-family: 'Courier New', monospace;
-      text-align: center;
-      gap: 18px;
+    const _isMobile = window.matchMedia('(pointer: coarse)').matches;
+
+    // ── Orientation / layout ──────────────────────────────────────
+    function _checkOrientation() {
+      if (!_isMobile) return;
+      const portrait = window.innerHeight > window.innerWidth;
+      document.getElementById('landscape-hint').classList.toggle('show', portrait);
+      if (!portrait) _positionControls();
+      else _hideControls();
     }
-    #landscape-hint.show { display: flex; }
-    #landscape-hint .icon { font-size: 52px; }
-    #landscape-hint p { font-size: 16px; color: #aaa; }
-  </style>
+
+    function _hideControls() {
+      document.getElementById('ctrl-joy').style.display = 'none';
+      document.getElementById('ctrl-dig').style.display = 'none';
+    }
+
+    function _positionControls() {
+      if (!_isMobile) return;
+      const canvas = document.querySelector('#game-container canvas');
+      if (!canvas) { setTimeout(_positionControls, 200); return; }
+
+      const rect   = canvas.getBoundingClientRect();
+      const vw     = window.innerWidth;
+      const vh     = window.innerHeight;
+      const PAD    = 6;
+      const leftW  = Math.floor(rect.left) - PAD;
+      const rightW = Math.floor(vw - rect.right) - PAD;
+      const zoneH  = vh - PAD * 2;
+
+      const joy = document.getElementById('ctrl-joy');
+      const dig = document.getElementById('ctrl-dig');
+
+      // Only show if there's usable side-bar space (phone landscape)
+      if (leftW < 40) { _hideControls(); return; }
+
+      joy.style.cssText = `display:flex;left:${PAD}px;top:${PAD}px;width:${leftW}px;height:${zoneH}px;`;
+
+      const hasStumps = window._activeGameScene?.cfg?.stumps > 0;
+      if (hasStumps && rightW >= 40) {
+        dig.style.cssText = `display:flex;right:${PAD}px;top:${PAD}px;width:${rightW}px;height:${zoneH}px;`;
+      } else {
+        dig.style.display = 'none';
+      }
+    }
+
+    window.addEventListener('resize', _checkOrientation);
+    window.addEventListener('load', () => setTimeout(_checkOrientation, 600));
+    setInterval(() => { if (_isMobile && window.innerWidth > window.innerHeight) _positionControls(); }, 1500);
+
+    // ── Joystick touch handling ───────────────────────────────────
+    const joy    = document.getElementById('ctrl-joy');
+    const ring   = document.getElementById('joy-ring');
+    const knob   = document.getElementById('joy-knob');
+    let joyOx = 0, joyOy = 0, joyId = -1;
+
+    function _scene() { return window._activeGameScene; }
+
+    joy.addEventListener('touchstart', e => {
+      e.preventDefault();
+      const t = e.changedTouches[0];
+      const r = joy.getBoundingClientRect();
+      joyId = t.identifier;
+      joyOx = t.clientX - r.left;
+      joyOy = t.clientY - r.top;
+      joy.classList.add('active');
+      ring.style.cssText = `display:block;left:${joyOx}px;top:${joyOy}px;`;
+      knob.style.cssText = `display:block;left:${joyOx}px;top:${joyOy}px;`;
+      const s = _scene(); if (s) { s._touch.active = true; s._touch.dx = 0; s._touch.dy = 0; }
+    }, { passive: false });
+
+    joy.addEventListener('touchmove', e => {
+      e.preventDefault();
+      for (const t of e.changedTouches) {
+        if (t.identifier !== joyId) continue;
+        const r   = joy.getBoundingClientRect();
+        const dx  = t.clientX - r.left - joyOx;
+        const dy  = t.clientY - r.top  - joyOy;
+        const d   = Math.sqrt(dx * dx + dy * dy);
+        const cap = 40;
+        const kx  = joyOx + (dx / (d || 1)) * Math.min(d, cap);
+        const ky  = joyOy + (dy / (d || 1)) * Math.min(d, cap);
+        knob.style.left = kx + 'px'; knob.style.top = ky + 'px';
+        const s = _scene();
+        if (s) { s._touch.dx = dx; s._touch.dy = dy; }
+      }
+    }, { passive: false });
+
+    joy.addEventListener('touchend', e => {
+      e.preventDefault();
+      for (const t of e.changedTouches) {
+        if (t.identifier !== joyId) continue;
+        joyId = -1;
+        joy.classList.remove('active');
+        ring.style.display = 'none'; knob.style.display = 'none';
+        const s = _scene(); if (s) { s._touch.active = false; s._touch.dx = 0; s._touch.dy = 0; }
+      }
+    }, { passive: false });
+
+    // ── DIG touch handling ────────────────────────────────────────
+    const dig = document.getElementById('ctrl-dig');
+
+    dig.addEventListener('touchstart', e => {
+      e.preventDefault();
+      dig.classList.add('active');
+      const s = _scene(); if (s) s._touch.digging = true;
+    }, { passive: false });
+
+    dig.addEventListener('touchend', e => {
+      e.preventDefault();
+      dig.classList.remove('active');
+      const s = _scene(); if (s) s._touch.digging = false;
+    }, { passive: false });
+
+  </script>
 
   <script src="https://sdk.scdn.co/spotify-player.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
   <script src="config.js"></script>
   <script src="js/spotify.js"></script>
   <script src="js/game.js"></script>
-<button onclick="handleBack()" style="position:fixed;bottom:16px;right:16px;z-index:9999;padding:8px 18px;background:linear-gradient(135deg,#a855f7,#ec4899);color:#fff;border:none;border-radius:20px;font-size:12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-weight:700;letter-spacing:0.1em;cursor:pointer;box-shadow:0 4px 12px rgba(168,85,247,0.4);">&#8592; Back</button>
-<script>
-  // Landscape hint for portrait mobile
-  const _isMobileTouch = window.matchMedia('(pointer: coarse)').matches;
-  function _checkOrientation() {
-    if (!_isMobileTouch) return;
-    const portrait = window.innerHeight > window.innerWidth;
-    document.getElementById('landscape-hint').classList.toggle('show', portrait);
-  }
-  window.addEventListener('resize', _checkOrientation);
-  _checkOrientation();
-</script>
+
+  <button onclick="handleBack()" style="position:fixed;bottom:16px;right:16px;z-index:9999;padding:8px 18px;background:linear-gradient(135deg,#a855f7,#ec4899);color:#fff;border:none;border-radius:20px;font-size:12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-weight:700;letter-spacing:0.1em;cursor:pointer;box-shadow:0 4px 12px rgba(168,85,247,0.4);">&#8592; Back</button>
 </body>
 </html>

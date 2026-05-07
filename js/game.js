@@ -13,10 +13,7 @@ const LAWN_Y  = TITLE_H;
 const LAWN_W  = GRID_W * TILE;
 const LAWN_H  = GRID_H * TILE;
 const HUD_Y   = LAWN_Y + LAWN_H;
-const HUD_H   = 80;
-const CTRL_Y  = CH;
-const CTRL_H  = 140;
-const TOTAL_H = CH + CTRL_H;
+const HUD_H   = CH - HUD_Y;
 
 // ─── Tile types ──────────────────────────────────────────────────
 const T_TALL   = 0;
@@ -384,9 +381,10 @@ class GameScene extends Phaser.Scene {
     };
     this.spKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
 
-    // ── Touch joystick ──────────────────────────────────────────
+    // ── Touch input ─────────────────────────────────────────────
     this._touch = { active: false, startX: 0, startY: 0, dx: 0, dy: 0, digging: false };
     this._buildJoystick();
+    window._activeGameScene = this;
   }
 
   // ── update ──────────────────────────────────────────────────────
@@ -1205,116 +1203,36 @@ class GameScene extends Phaser.Scene {
     });
   }
 
-  // ── control zone: joystick (left) + dig button (right) ──────────
+  // ── canvas-touch fallback (HTML controls are primary on mobile) ──
   _buildJoystick() {
-    const PAD   = 10;
-    const joyR  = 44;
-    const JOY_X1 = PAD, JOY_X2 = CW * 0.54, JOY_W = JOY_X2 - JOY_X1;
-    const DIG_X1 = CW * 0.57, DIG_X2 = CW - PAD, DIG_W = DIG_X2 - DIG_X1;
-    const ZONE_Y = CTRL_Y + PAD, ZONE_H = CTRL_H - PAD * 2;
-    const JOY_CX = JOY_X1 + JOY_W / 2, JOY_CY = ZONE_Y + ZONE_H / 2;
-    const DIG_CX = DIG_X1 + DIG_W / 2, DIG_CY = ZONE_Y + ZONE_H / 2;
-
-    // ── Joystick zone background ────────────────────────────────
-    const joyBg = this.add.graphics().setDepth(48).setScrollFactor(0);
-    const _drawJoyIdle = () => {
-      joyBg.clear();
-      joyBg.fillStyle(0xffffff, 0.04);
-      joyBg.fillRoundedRect(JOY_X1, ZONE_Y, JOY_W, ZONE_H, 14);
-      joyBg.lineStyle(1.5, 0xffffff, 0.12);
-      joyBg.strokeRoundedRect(JOY_X1, ZONE_Y, JOY_W, ZONE_H, 14);
-    };
-    _drawJoyIdle();
-    const moveLbl = this.add.text(JOY_CX, JOY_CY, 'MOVE', {
-      fontSize: '11px', fill: '#fff', fontFamily: 'Courier New',
-    }).setOrigin(0.5).setDepth(49).setScrollFactor(0).setAlpha(0.2);
-
-    // Active ring + knob
+    const joyR = 50;
     const ring = this.add.graphics().setDepth(50).setScrollFactor(0).setAlpha(0);
     ring.lineStyle(3, 0xffffff, 0.7); ring.strokeCircle(0, 0, joyR);
     const knob = this.add.graphics().setDepth(51).setScrollFactor(0).setAlpha(0);
     knob.fillStyle(0xffffff, 0.25); knob.fillCircle(0, 0, 22);
-    knob.lineStyle(2, 0xffffff, 0.6); knob.strokeCircle(0, 0, 22);
+    knob.lineStyle(2, 0xffffff, 0.5); knob.strokeCircle(0, 0, 22);
 
-    // ── DIG zone (only if level has stumps) ─────────────────────
-    let digBg = null, digLbl = null;
-    const _drawDigIdle = () => {
-      if (!digBg) return;
-      digBg.clear();
-      digBg.fillStyle(0xffffff, 0.05);
-      digBg.fillRoundedRect(DIG_X1, ZONE_Y, DIG_W, ZONE_H, 14);
-      digBg.lineStyle(1.5, 0xffcc00, 0.3);
-      digBg.strokeRoundedRect(DIG_X1, ZONE_Y, DIG_W, ZONE_H, 14);
-    };
-    const _drawDigActive = () => {
-      if (!digBg) return;
-      digBg.clear();
-      digBg.fillStyle(0xffcc00, 0.18);
-      digBg.fillRoundedRect(DIG_X1, ZONE_Y, DIG_W, ZONE_H, 14);
-      digBg.lineStyle(2.5, 0xffcc00, 0.85);
-      digBg.strokeRoundedRect(DIG_X1, ZONE_Y, DIG_W, ZONE_H, 14);
-    };
-
-    if (this.cfg.stumps > 0) {
-      digBg = this.add.graphics().setDepth(48).setScrollFactor(0);
-      _drawDigIdle();
-      digLbl = this.add.text(DIG_CX, DIG_CY, 'DIG', {
-        fontSize: '18px', fill: '#ffcc00', fontFamily: 'Courier New', fontStyle: 'bold',
-      }).setOrigin(0.5).setDepth(49).setScrollFactor(0).setAlpha(0.55);
-    }
-
-    let sx = JOY_CX, sy = JOY_CY;
-    let joyPtrId = -1, digPtrId = -1;
-
-    const _inJoy = (px, py) => px >= JOY_X1 && px <= JOY_X2 && py >= ZONE_Y && py <= ZONE_Y + ZONE_H;
-    const _inDig = (px, py) => digBg && px >= DIG_X1 && px <= DIG_X2 && py >= ZONE_Y && py <= ZONE_Y + ZONE_H;
+    let sx = 0, sy = 0, joyPtrId = -1;
 
     this.input.on('pointerdown', (ptr) => {
-      if (_inDig(ptr.x, ptr.y)) {
-        digPtrId = ptr.id;
-        this._touch.digging = true;
-        _drawDigActive();
-        if (digLbl) digLbl.setAlpha(1);
-        return;
-      }
-      if (!_inJoy(ptr.x, ptr.y)) return;
-      joyPtrId = ptr.id;
-      sx = Phaser.Math.Clamp(ptr.x, JOY_X1 + joyR, JOY_X2 - joyR);
-      sy = Phaser.Math.Clamp(ptr.y, ZONE_Y + joyR, ZONE_Y + ZONE_H - joyR);
-      this._touch.active = true;
-      this._touch.dx = 0; this._touch.dy = 0;
+      if (ptr.x > CW * 0.6 || ptr.y < LAWN_Y || ptr.y > HUD_Y) return;
+      joyPtrId = ptr.id; sx = ptr.x; sy = ptr.y;
+      this._touch.active = true; this._touch.dx = 0; this._touch.dy = 0;
       ring.setPosition(sx, sy).setAlpha(1);
       knob.setPosition(sx, sy).setAlpha(1);
-      moveLbl.setAlpha(0);
-      joyBg.clear();
-      joyBg.fillStyle(0xffffff, 0.07);
-      joyBg.fillRoundedRect(JOY_X1, ZONE_Y, JOY_W, ZONE_H, 14);
     });
-
     this.input.on('pointermove', (ptr) => {
       if (!this._touch.active || ptr.id !== joyPtrId) return;
       const dx = ptr.x - sx, dy = ptr.y - sy;
       const dist = Math.sqrt(dx * dx + dy * dy);
-      const cl = Math.min(dist, joyR);
-      knob.setPosition(sx + (dx / (dist || 1)) * cl, sy + (dy / (dist || 1)) * cl);
+      knob.setPosition(sx + (dx / (dist || 1)) * Math.min(dist, joyR),
+                       sy + (dy / (dist || 1)) * Math.min(dist, joyR));
       this._touch.dx = dx; this._touch.dy = dy;
     });
-
     this.input.on('pointerup', (ptr) => {
-      if (ptr.id === joyPtrId) {
-        joyPtrId = -1;
-        this._touch.active = false;
-        this._touch.dx = 0; this._touch.dy = 0;
-        ring.setAlpha(0); knob.setAlpha(0);
-        moveLbl.setAlpha(0.2);
-        _drawJoyIdle();
-      }
-      if (ptr.id === digPtrId) {
-        digPtrId = -1;
-        this._touch.digging = false;
-        _drawDigIdle();
-        if (digLbl) digLbl.setAlpha(0.55);
-      }
+      if (ptr.id !== joyPtrId) return;
+      joyPtrId = -1; this._touch.active = false; this._touch.dx = 0; this._touch.dy = 0;
+      ring.setAlpha(0); knob.setAlpha(0);
     });
   }
 
@@ -1376,7 +1294,6 @@ class GameScene extends Phaser.Scene {
 
   _buildHUD() {
     this.add.rectangle(CW / 2, HUD_Y + HUD_H / 2, CW, HUD_H, C_HUD_BG, 0.90).setDepth(20);
-    this.add.rectangle(CW / 2, CTRL_Y + CTRL_H / 2, CW, CTRL_H, 0x080808, 1.0).setDepth(20);
 
     // Row 1 ── gas bar
     this.add.text(10, HUD_Y + 16, 'GAS:', {
@@ -1816,7 +1733,7 @@ function _drawDog(g) {
 const PHASER_CONFIG = {
   type: Phaser.AUTO,
   width:  CW,
-  height: TOTAL_H,
+  height: CH,
   parent: 'game-container',
   backgroundColor: '#111',
   scene: [BootScene, MenuScene, GameScene, LevelCompleteScene, GameOverScene, WinScene],
