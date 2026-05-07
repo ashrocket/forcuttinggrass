@@ -43,6 +43,12 @@ function getSavedLevel() {
   const m = document.cookie.match(/fcg_level=(\d)/);
   return m ? Math.min(parseInt(m[1]), 5) : 1;
 }
+function hasWon() {
+  return /fcg_won=1/.test(document.cookie);
+}
+function setWon() {
+  document.cookie = `fcg_won=1;max-age=${60 * 60 * 24 * 365 * 10};path=/`;
+}
 
 // ─── Level configs ────────────────────────────────────────────────
 const LEVELS = [
@@ -583,7 +589,12 @@ class GameScene extends Phaser.Scene {
   // ── gas ─────────────────────────────────────────────────────────
   _drainGas(delta) {
     if (!this.moving || this.replay) return;
-    this.gas -= this.cfg.gasDrain * (delta / 16.67);
+    const gx = Math.floor(this.mx / TILE);
+    const gy = Math.floor((this.my - LAWN_Y) / TILE);
+    const onCut = gx >= 0 && gx < GRID_W && gy >= 0 && gy < GRID_H
+      && this.grid[gy][gx] === T_CUT;
+    const drain = onCut ? this.cfg.gasDrain * 0.4 : this.cfg.gasDrain;
+    this.gas -= drain * (delta / 16.67);
     if (this.gas <= 0) {
       this.gas = 0;
       if (this.state === 'playing') {
@@ -1472,8 +1483,10 @@ class LevelCompleteScene extends Phaser.Scene {
     }).setOrigin(0.5);
 
     if (this.lvl >= 5) {
+      const replayUnlocked = hasWon();
+      setWon();
       saveLevel(1); // completed all levels — reset saved progress
-      this.time.delayedCall(2000, () => this.scene.start('Win'));
+      this.time.delayedCall(2000, () => this.scene.start('Win', { replayUnlocked }));
       return;
     }
 
@@ -1555,6 +1568,8 @@ class GameOverScene extends Phaser.Scene {
 class WinScene extends Phaser.Scene {
   constructor() { super({ key: 'Win' }); }
 
+  init(data) { this.replayUnlocked = data.replayUnlocked || false; }
+
   create() {
     SFX.levelDone();
 
@@ -1622,13 +1637,15 @@ class WinScene extends Phaser.Scene {
     play.on('pointerdown', () => { window._musicPlaying = false; this.scene.start('Menu'); });
     this.input.keyboard.on('keydown-ENTER', () => { window._musicPlaying = false; this.scene.start('Menu'); });
 
-    const replay = this.add.text(CW / 2, 508, '◄◄ WATCH REPLAY ×5', {
-      fontSize: '17px', fill: '#aaffaa', fontFamily: 'Courier New', fontStyle: 'bold',
-      backgroundColor: '#0a1a0a', padding: { x: 18, y: 10 },
-    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
-    replay.on('pointerover', () => replay.setStyle({ fill: '#ffffff' }));
-    replay.on('pointerout',  () => replay.setStyle({ fill: '#aaffaa' }));
-    replay.on('pointerdown', () => this.scene.start('Game', { level: 1, replay: true }));
+    if (this.replayUnlocked) {
+      const replay = this.add.text(CW / 2, 508, '◄◄ WATCH REPLAY ×5', {
+        fontSize: '17px', fill: '#aaffaa', fontFamily: 'Courier New', fontStyle: 'bold',
+        backgroundColor: '#0a1a0a', padding: { x: 18, y: 10 },
+      }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+      replay.on('pointerover', () => replay.setStyle({ fill: '#ffffff' }));
+      replay.on('pointerout',  () => replay.setStyle({ fill: '#aaffaa' }));
+      replay.on('pointerdown', () => this.scene.start('Game', { level: 1, replay: true }));
+    }
   }
 }
 
