@@ -378,7 +378,7 @@ class GameScene extends Phaser.Scene {
     this.spKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
 
     // ── Touch joystick ──────────────────────────────────────────
-    this._touch = { active: false, startX: 0, startY: 0, dx: 0, dy: 0 };
+    this._touch = { active: false, startX: 0, startY: 0, dx: 0, dy: 0, digging: false };
     this._buildJoystick();
   }
 
@@ -628,7 +628,7 @@ class GameScene extends Phaser.Scene {
   // ── stump digging ────────────────────────────────────────────────
   _checkStumps(delta) {
     if (!this.cfg.stumps) return;
-    const digging = this.replay || this.spKey.isDown;
+    const digging = this.replay || this.spKey.isDown || this._touch.digging;
 
     for (const s of this.stumps) {
       if (s.dug) continue;
@@ -1198,18 +1198,56 @@ class GameScene extends Phaser.Scene {
     });
   }
 
-  // ── virtual joystick for mobile ──────────────────────────────────
+  // ── virtual joystick + dig button for mobile ────────────────────
   _buildJoystick() {
     const joyR = 50;
-    // Ring: drawn at local (0,0), repositioned via setPosition
     const ring = this.add.graphics().setDepth(50).setScrollFactor(0).setAlpha(0);
     ring.lineStyle(3, 0xffffff, 0.5); ring.strokeCircle(0, 0, joyR);
     const knob = this.add.circle(0, 0, 20, 0xffffff, 0).setDepth(51).setScrollFactor(0);
 
     let sx = 0, sy = 0;
+    let joyPtrId = -1;
+    let digPtrId = -1;
+
+    // ── DIG button (right side, only when stumps exist) ──────────
+    const digBtnX = CW - 72;
+    const digBtnY = LAWN_Y + LAWN_H * 0.72;
+    const digR    = 44;
+    let   digBg   = null;
+    let   digLbl  = null;
+
+    if (this.cfg.stumps > 0) {
+      digBg = this.add.graphics().setDepth(50).setScrollFactor(0);
+      digBg.fillStyle(0xffffff, 0.15);
+      digBg.fillCircle(digBtnX, digBtnY, digR);
+      digBg.lineStyle(3, 0xffffff, 0.45);
+      digBg.strokeCircle(digBtnX, digBtnY, digR);
+
+      digLbl = this.add.text(digBtnX, digBtnY, 'DIG', {
+        fontSize: '16px', fill: '#fff', fontFamily: 'Courier New',
+        fontStyle: 'bold', align: 'center',
+      }).setOrigin(0.5, 0.5).setDepth(51).setScrollFactor(0).setAlpha(0.65);
+    }
+
+    const _inDig = (px, py) =>
+      digBg && Math.sqrt((px - digBtnX) ** 2 + (py - digBtnY) ** 2) <= digR + 10;
 
     this.input.on('pointerdown', (ptr) => {
+      // DIG button — right side
+      if (_inDig(ptr.x, ptr.y)) {
+        digPtrId = ptr.id;
+        this._touch.digging = true;
+        if (digBg) digBg.clear(),
+          digBg.fillStyle(0xffffff, 0.35),
+          digBg.fillCircle(digBtnX, digBtnY, digR),
+          digBg.lineStyle(3, 0xffcc00, 0.8),
+          digBg.strokeCircle(digBtnX, digBtnY, digR);
+        if (digLbl) digLbl.setStyle({ fill: '#ffcc00' });
+        return;
+      }
+      // Joystick — left 60% of play area
       if (ptr.x > CW * 0.6 || ptr.y < LAWN_Y || ptr.y > HUD_Y) return;
+      joyPtrId = ptr.id;
       sx = ptr.x; sy = ptr.y;
       this._touch.active = true;
       this._touch.startX = sx; this._touch.startY = sy;
@@ -1219,7 +1257,7 @@ class GameScene extends Phaser.Scene {
     });
 
     this.input.on('pointermove', (ptr) => {
-      if (!this._touch.active) return;
+      if (!this._touch.active || ptr.id !== joyPtrId) return;
       const dx = ptr.x - sx, dy = ptr.y - sy;
       const dist = Math.sqrt(dx * dx + dy * dy);
       const cl = Math.min(dist, joyR);
@@ -1227,10 +1265,23 @@ class GameScene extends Phaser.Scene {
       this._touch.dx = dx; this._touch.dy = dy;
     });
 
-    this.input.on('pointerup', () => {
-      this._touch.active = false;
-      this._touch.dx = 0; this._touch.dy = 0;
-      ring.setAlpha(0); knob.setAlpha(0);
+    this.input.on('pointerup', (ptr) => {
+      if (ptr.id === joyPtrId) {
+        joyPtrId = -1;
+        this._touch.active = false;
+        this._touch.dx = 0; this._touch.dy = 0;
+        ring.setAlpha(0); knob.setAlpha(0);
+      }
+      if (ptr.id === digPtrId) {
+        digPtrId = -1;
+        this._touch.digging = false;
+        if (digBg) digBg.clear(),
+          digBg.fillStyle(0xffffff, 0.15),
+          digBg.fillCircle(digBtnX, digBtnY, digR),
+          digBg.lineStyle(3, 0xffffff, 0.45),
+          digBg.strokeCircle(digBtnX, digBtnY, digR);
+        if (digLbl) digLbl.setStyle({ fill: '#fff' });
+      }
     });
   }
 
@@ -1329,8 +1380,9 @@ class GameScene extends Phaser.Scene {
     }
 
     // Row 2 ── controls hint
-    let ctrlTxt = 'WASD / ARROWS: mow';
-    if (this.cfg.stumps   > 0) ctrlTxt += '   HOLD SPACE: dig stumps';
+    const isMobile = window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+    let ctrlTxt = isMobile ? 'DRAG LEFT: mow' : 'WASD / ARROWS: mow';
+    if (this.cfg.stumps   > 0) ctrlTxt += isMobile ? '   HOLD DIG: dig stumps' : '   HOLD SPACE: dig stumps';
     if (this.cfg.crickets > 0) ctrlTxt += '   ⚠ AVOID CRICKETS (-30 gas)';
     if (this.cfg.dogs     > 0) ctrlTxt += '   ⚠ AVOID DOG';
     this.add.text(CW / 2, HUD_Y + 42, ctrlTxt, {
