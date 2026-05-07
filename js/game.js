@@ -209,7 +209,7 @@ class MenuScene extends Phaser.Scene {
 
     const spStatus = window._spotifyConnected ? '● SPOTIFY CONNECTED' : '○ NO SPOTIFY';
     const spColor  = window._spotifyConnected ? '#1DB954' : '#666';
-    this.add.text(CW / 2, CH / 2 - 80, `♫  THE GOON SONG  —  ${spStatus}`, {
+    this.add.text(CW / 2, CH / 2 - 80, `♫  FOR CUTTING GRASS BY GOON  —  ${spStatus}`, {
       fontSize: '13px', fill: spColor, fontFamily: 'Courier New',
     }).setOrigin(0.5);
 
@@ -1272,7 +1272,7 @@ class GameScene extends Phaser.Scene {
       `${this.cfg.title}: ${this.cfg.sub}  —  ${this.cfg.desc}`, {
       fontSize: '13px', fill: '#ffcc00', fontFamily: 'Courier New',
     }).setOrigin(0, 0.5).setDepth(21);
-    const sp = window._spotifyConnected ? '♫ THE GOON SONG' : '♫ NO MUSIC';
+    const sp = window._spotifyConnected ? '♫ FOR CUTTING GRASS BY GOON' : '♫ NO MUSIC';
     const sc = window._spotifyConnected ? '#1DB954' : '#444';
     this.add.text(CW - 10, TITLE_H / 2, sp, {
       fontSize: '12px', fill: sc, fontFamily: 'Courier New',
@@ -1589,7 +1589,7 @@ class WinScene extends Phaser.Scene {
       fontSize: '14px', fill: '#8bc44a', fontFamily: 'Courier New',
     }).setOrigin(0.5);
 
-    this.add.text(CW / 2, 248, 'THE GOON SONG PLAYED IN FULL.', {
+    this.add.text(CW / 2, 248, 'FOR CUTTING GRASS BY GOON PLAYED IN FULL.', {
       fontSize: '17px', fill: '#1DB954', fontFamily: 'Courier New',
     }).setOrigin(0.5);
 
