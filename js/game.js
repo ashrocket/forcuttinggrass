@@ -184,6 +184,7 @@ class MenuScene extends Phaser.Scene {
 
   create() {
     window._totalScore = 0;
+    if (window._mobileSetBar) window._mobileSetBar('');
 
     const bg = this.add.graphics();
     bg.fillStyle(C_GRASS_TALL);
@@ -1290,6 +1291,9 @@ class GameScene extends Phaser.Scene {
     this.add.text(CW - 10, TITLE_H / 2, sp, {
       fontSize: '12px', fill: sc, fontFamily: 'Courier New',
     }).setOrigin(1, 0.5).setDepth(21);
+    if (window._mobileSetBar) {
+      window._mobileSetBar(`${this.cfg.title}: ${this.cfg.sub}  —  ${this.cfg.desc}`);
+    }
   }
 
   _buildHUD() {

@@ -20,6 +20,15 @@
       touch-action: none;
     }
     canvas { display: block; image-rendering: pixelated; }
+    #game-container {
+      position: fixed; inset: 0;
+    }
+    #mobile-bar {
+      display: none; position: fixed; top: 0; left: 0; right: 0; z-index: 600;
+      background: rgba(0,0,0,0.88); padding: 6px 10px;
+      font-family: 'Courier New', monospace; font-size: 13px; color: #ffcc00;
+      pointer-events: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
 
     #spotify-overlay {
       position: fixed;
@@ -122,6 +131,7 @@
     </div>
   </div>
 
+  <div id="mobile-bar"></div>
   <!-- Mobile controls -->
   <div id="ctrl-joy"><span class="ctrl-label">MOVE</span><div id="joy-ring"></div><div id="joy-knob"></div></div>
   <div id="ctrl-dig"><span class="ctrl-label">DIG</span></div>
@@ -150,6 +160,14 @@
     }
 
     const _isMobile = window.matchMedia('(pointer: coarse)').matches;
+
+    // ── Mobile level bar ──────────────────────────────────────────
+    const _mobileBar = document.getElementById('mobile-bar');
+    if (_isMobile) _mobileBar.style.display = 'block';
+    window._mobileSetBar = (text, color) => {
+      _mobileBar.textContent = text;
+      _mobileBar.style.color = color || '#ffcc00';
+    };
 
     // Request fullscreen on first touch — hides Safari tab bar in landscape
     if (_isMobile) {
@@ -286,6 +304,13 @@
   <script src="js/spotify.js"></script>
   <script src="js/game.js"></script>
 
-  <button onclick="handleBack()" style="position:fixed;bottom:16px;right:16px;z-index:9999;padding:8px 18px;background:linear-gradient(135deg,#a855f7,#ec4899);color:#fff;border:none;border-radius:20px;font-size:12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-weight:700;letter-spacing:0.1em;cursor:pointer;box-shadow:0 4px 12px rgba(168,85,247,0.4);">&#8592; Back</button>
+  <button id="back-btn" style="position:fixed;bottom:16px;right:16px;z-index:9999;padding:8px 18px;background:linear-gradient(135deg,#a855f7,#ec4899);color:#fff;border:none;border-radius:20px;font-size:12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-weight:700;letter-spacing:0.1em;cursor:pointer;box-shadow:0 4px 12px rgba(168,85,247,0.4);touch-action:manipulation;">&#8592; Back</button>
+  <script>
+    document.getElementById('back-btn').addEventListener('touchend', function(e) {
+      e.preventDefault();
+      handleBack();
+    });
+    document.getElementById('back-btn').addEventListener('click', handleBack);
+  </script>
 </body>
 </html>

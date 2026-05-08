@@ -104,23 +104,39 @@ const SpotifyPlayer = {
   },
 
   async play(startMs = 0) {
-    if (!this._deviceId) return;
     const token = SpotifyAuth.getToken() || await SpotifyAuth.refresh();
     if (!token) return;
-    await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${this._deviceId}`, {
-      method:  'PUT',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ uris: [CONFIG.trackUri], position_ms: startMs }),
-    });
+    const body    = JSON.stringify({ uris: [CONFIG.trackUri], position_ms: startMs });
+    const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+    if (this._deviceId) {
+      // Desktop Web Playback SDK device
+      await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${this._deviceId}`,
+        { method: 'PUT', headers, body });
+    } else {
+      // Mobile / no SDK: Spotify Connect — plays on user's active Spotify app
+      const res = await fetch('https://api.spotify.com/v1/me/player/play',
+        { method: 'PUT', headers, body });
+      if (res.status === 204 || res.ok) window._spotifyConnected = true;
+    }
   },
 
-  pause()      { this._player?.pause(); },
+  pause() {
+    if (this._player) {
+      this._player.pause();
+    } else {
+      const token = SpotifyAuth.getToken();
+      if (token) fetch('https://api.spotify.com/v1/me/player/pause',
+        { method: 'PUT', headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
+    }
+  },
   resume()     { this._player?.resume(); },
   setVolume(v) { this._player?.setVolume(v); },
   isReady()    { return !!this._deviceId; },
 };
 
 // ─── Bootstrap ────────────────────────────────────────────────────
+
+const _isMobileBrowser = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
 (async function bootstrap() {
   const skip = _readToken('sp_skip') === '1';
@@ -133,10 +149,16 @@ const SpotifyPlayer = {
 
   if (SpotifyAuth.hasToken()) {
     document.getElementById('spotify-overlay').classList.add('hidden');
-    try {
-      await SpotifyPlayer.init();
-    } catch (e) {
-      console.warn('[Spotify] init failed, continuing without music:', e);
+    if (_isMobileBrowser) {
+      // Mobile: Web Playback SDK is desktop-only.
+      // Set connected optimistically; play() will use Spotify Connect REST API.
+      window._spotifyConnected = true;
+    } else {
+      try {
+        await SpotifyPlayer.init();
+      } catch (e) {
+        console.warn('[Spotify] init failed, continuing without music:', e);
+      }
     }
     window._gameReady = true;
     return;
