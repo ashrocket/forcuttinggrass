@@ -185,6 +185,8 @@ class MenuScene extends Phaser.Scene {
   create() {
     window._totalScore = 0;
     if (window._mobileSetBar) window._mobileSetBar('');
+    const _ms = document.getElementById('mobile-hud-strip');
+    if (_ms) _ms.style.display = 'none';
 
     const bg = this.add.graphics();
     bg.fillStyle(C_GRASS_TALL);
@@ -888,6 +890,14 @@ class GameScene extends Phaser.Scene {
     this.gasPctTxt.setText(`${Math.floor(pct * 100)}%`);
     this.scoreTxt.setText(`${this.score}`);
 
+    const mh = window._mobileHUD;
+    if (mh) {
+      mh.gasfill.style.width      = `${Math.max(0, pct * 100)}%`;
+      mh.gasfill.style.background = pct > 0.5 ? '#00cc44' : pct > 0.25 ? '#ffaa00' : '#ff3333';
+      mh.cut.textContent          = `${cutPct}%`;
+      mh.score.textContent        = `${this.score}`;
+    }
+
     this._updateIconRow();
   }
 
@@ -1347,6 +1357,12 @@ class GameScene extends Phaser.Scene {
     // Row 3 ── live item icons
     this.iconRow = null;
     this._buildIconRow();
+
+    const mh = window._mobileHUD;
+    if (mh) {
+      mh.goal.textContent = Math.floor(this.cfg.win * 100) + '%';
+      mh.strip.style.display = 'flex';
+    }
   }
 
   _buildIconRow() {

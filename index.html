@@ -29,6 +29,22 @@
       font-family: 'Courier New', monospace; font-size: 13px; color: #ffcc00;
       pointer-events: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
+    #mobile-hud-strip {
+      display: none; position: fixed; z-index: 500;
+      left: 0; right: 0;
+      background: rgba(0,0,0,0.80); padding: 5px 14px;
+      font-family: 'Courier New', monospace; font-size: 12px;
+      align-items: center; justify-content: space-between; gap: 10px;
+      pointer-events: none;
+    }
+    #mhud-gasbar {
+      display: inline-block; width: 56px; height: 7px;
+      background: #222; border-radius: 4px; overflow: hidden;
+      vertical-align: middle; margin-left: 4px;
+    }
+    #mhud-gasfill { height: 100%; width: 100%; background: #00cc44; }
+    .mhud-lbl { color: #666; font-size: 10px; }
+    .mhud-val { color: #ffcc00; }
 
     #spotify-overlay {
       position: fixed;
@@ -132,6 +148,12 @@
   </div>
 
   <div id="mobile-bar"></div>
+  <div id="mobile-hud-strip">
+    <span><span class="mhud-lbl">GAS</span><span id="mhud-gasbar"><span id="mhud-gasfill"></span></span></span>
+    <span><span class="mhud-lbl">CUT </span><span class="mhud-val" id="mhud-cut">0%</span></span>
+    <span><span class="mhud-lbl">GOAL </span><span style="color:#aaa" id="mhud-goal">—</span></span>
+    <span><span class="mhud-lbl">SCORE </span><span style="color:#fff" id="mhud-score">0</span></span>
+  </div>
   <!-- Mobile controls -->
   <div id="ctrl-joy"><span class="ctrl-label">MOVE</span><div id="joy-ring"></div><div id="joy-knob"></div></div>
   <div id="ctrl-dig"><span class="ctrl-label">DIG</span></div>
@@ -161,13 +183,25 @@
 
     const _isMobile = window.matchMedia('(pointer: coarse)').matches;
 
-    // ── Mobile level bar ──────────────────────────────────────────
-    const _mobileBar = document.getElementById('mobile-bar');
+    // ── Mobile overlays ───────────────────────────────────────────
+    const _mobileBar     = document.getElementById('mobile-bar');
+    const _mobileHUDStrip = document.getElementById('mobile-hud-strip');
     if (_isMobile) _mobileBar.style.display = 'block';
+
     window._mobileSetBar = (text, color) => {
       _mobileBar.textContent = text;
       _mobileBar.style.color = color || '#ffcc00';
     };
+
+    if (_isMobile) {
+      window._mobileHUD = {
+        gasfill: document.getElementById('mhud-gasfill'),
+        cut:     document.getElementById('mhud-cut'),
+        goal:    document.getElementById('mhud-goal'),
+        score:   document.getElementById('mhud-score'),
+        strip:   _mobileHUDStrip,
+      };
+    }
 
     // Request fullscreen on first touch — hides Safari tab bar in landscape
     if (_isMobile) {
@@ -205,8 +239,16 @@
         } else {
           dig.style.display = 'none';
         }
+        // Position HUD strip just below the canvas
+        const canvas = document.querySelector('#game-container canvas');
+        if (canvas && _mobileHUDStrip) {
+          const r = canvas.getBoundingClientRect();
+          _mobileHUDStrip.style.top = `${r.bottom + 4}px`;
+        }
         return;
       }
+      // Hide HUD strip in landscape (sidebar controls have the space)
+      if (_mobileHUDStrip) _mobileHUDStrip.style.display = 'none';
 
       // Landscape: side bars flanking the canvas
       const canvas = document.querySelector('#game-container canvas');
