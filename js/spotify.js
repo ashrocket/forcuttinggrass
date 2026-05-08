@@ -77,7 +77,14 @@ const SpotifyPlayer = {
     this._player.on('ready', ({ device_id }) => {
       this._deviceId = device_id;
       window._spotifyReady = true;
+      window._spotifyConnected = true;
       console.log('[Spotify] ready, device:', device_id);
+      // If the Menu is already showing, start music now
+      const gi = window._gameInstance;
+      if (gi && gi.scene.isActive('Menu') && !window._musicPlaying) {
+        window._musicPlaying = true;
+        SpotifyPlayer.play();
+      }
     });
 
     this._player.on('not_ready',            () => console.warn('[Spotify] went offline'));
@@ -126,8 +133,11 @@ const SpotifyPlayer = {
 
   if (SpotifyAuth.hasToken()) {
     document.getElementById('spotify-overlay').classList.add('hidden');
-    await SpotifyPlayer.init();
-    window._spotifyConnected = true;
+    try {
+      await SpotifyPlayer.init();
+    } catch (e) {
+      console.warn('[Spotify] init failed, continuing without music:', e);
+    }
     window._gameReady = true;
     return;
   }
