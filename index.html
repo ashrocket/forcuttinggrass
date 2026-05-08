@@ -2,7 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>GRASS CUTTER 2003</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -11,9 +13,11 @@
       display: flex;
       justify-content: center;
       align-items: center;
-      min-height: 100vh;
+      width: 100dvw;
+      min-height: 100dvh;
       overflow: hidden;
       font-family: 'Courier New', monospace;
+      touch-action: none;
     }
     canvas { display: block; image-rendering: pixelated; }
 
@@ -162,6 +166,15 @@
     }
 
     const _isMobile = window.matchMedia('(pointer: coarse)').matches;
+
+    // Request fullscreen on first touch — hides Safari tab bar in landscape
+    if (_isMobile) {
+      document.addEventListener('touchstart', function _tryFS() {
+        const el = document.documentElement;
+        (el.requestFullscreen || el.webkitRequestFullscreen || (() => {})).call(el);
+        document.removeEventListener('touchstart', _tryFS);
+      }, { once: true, passive: true });
+    }
 
     // ── Orientation / layout ──────────────────────────────────────
     function _checkOrientation() {
