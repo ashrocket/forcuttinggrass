@@ -3,8 +3,8 @@
 // redirect to Spotify themselves.
 
 const SpotifyAuth = {
-  hasToken() { return !!_readToken('sp_token'); },
-  getToken()  { return _readToken('sp_token'); },
+  hasToken() { return !!_readToken('sp_token_v2'); },
+  getToken()  { return _readToken('sp_token_v2'); },
 
   async refresh() {
     const rt = _readToken('sp_refresh');
@@ -20,7 +20,7 @@ const SpotifyAuth = {
     });
     if (!res.ok) return null;
     const d = await res.json();
-    _writeToken('sp_token', d.access_token, d.expires_in);
+    _writeToken('sp_token_v2', d.access_token, d.expires_in);
     if (d.refresh_token) _writeToken('sp_refresh', d.refresh_token, 60 * 60 * 24 * 30);
     return d.access_token;
   },
@@ -113,10 +113,25 @@ const SpotifyPlayer = {
       await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${this._deviceId}`,
         { method: 'PUT', headers, body });
     } else {
-      // Mobile / no SDK: Spotify Connect — plays on user's active Spotify app
+      // Mobile / no SDK: find an available Spotify device and target it explicitly
+      try {
+        const devRes = await fetch('https://api.spotify.com/v1/me/player/devices',
+          { headers });
+        if (devRes.ok) {
+          const { devices } = await devRes.json();
+          const target = devices.find(d => d.is_active) || devices[0];
+          if (target) {
+            await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${target.id}`,
+              { method: 'PUT', headers, body });
+            window._spotifyConnected = true;
+            return;
+          }
+        }
+      } catch (_) {}
+      // Fallback: no device found, try without device_id (last active device)
       const res = await fetch('https://api.spotify.com/v1/me/player/play',
-        { method: 'PUT', headers, body });
-      if (res.status === 204 || res.ok) window._spotifyConnected = true;
+        { method: 'PUT', headers, body }).catch(() => null);
+      if (res && (res.status === 204 || res.ok)) window._spotifyConnected = true;
     }
   },
 
