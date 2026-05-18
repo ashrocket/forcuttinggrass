@@ -33,7 +33,7 @@ const C_WHEEL       = 0x222222;
 const C_GAS_CAN     = 0xdd2222;
 const C_CRICKET     = 0x228b22;
 const C_HUD_BG      = 0x0d1a0d;
-const C_DOG         = 0xc8a060;
+const C_SKUNK        = 0x111111;
 
 // ─── Cookie helpers ───────────────────────────────────────────────
 function saveLevel(n) {
@@ -56,35 +56,35 @@ const LEVELS = [
     n: 1, title: 'LEVEL 1', sub: 'THE HOUSE NEXT DOOR',
     desc: 'Mow around the house and garden.',
     gasMax: 600, gasDrain: 0.10,
-    cans: 0, stumps: 0, crickets: 0, dogs: 0, cricketMs: 0,
+    cans: 0, stumps: 0, crickets: 0, skunks:0, cricketMs: 0,
     win: 0.80,
   },
   {
     n: 2, title: 'LEVEL 2', sub: 'RUNNING ON FUMES',
     desc: 'Gas runs out — find the gas can!',
     gasMax: 200, gasDrain: 0.18,
-    cans: 2, stumps: 0, crickets: 0, dogs: 0, cricketMs: 0,
+    cans: 2, stumps: 0, crickets: 0, skunks:0, cricketMs: 0,
     win: 0.80,
   },
   {
     n: 3, title: 'LEVEL 3', sub: 'STUMP TROUBLE',
     desc: 'Hold SPACE near stumps to dig them up.',
     gasMax: 180, gasDrain: 0.20,
-    cans: 2, stumps: 2, crickets: 0, dogs: 0, cricketMs: 0,
+    cans: 2, stumps: 2, crickets: 0, skunks:0, cricketMs: 0,
     win: 0.80,
   },
   {
     n: 4, title: 'LEVEL 4', sub: 'CRICKET SEASON',
-    desc: 'Crickets hop around. Hit one = lose gas!  Watch the dog!',
+    desc: 'Crickets hop around. Hit one = lose gas!  Watch the skunk!',
     gasMax: 160, gasDrain: 0.22,
-    cans: 2, stumps: 2, crickets: 2, dogs: 1, cricketMs: 1200,
+    cans: 2, stumps: 2, crickets: 2, skunks:1, cricketMs: 1200,
     win: 0.85,
   },
   {
     n: 5, title: 'LEVEL 5', sub: 'THE FINAL YARD',
     desc: 'Everything at once. Good luck.',
     gasMax: 140, gasDrain: 0.25,
-    cans: 4, stumps: 3, crickets: 3, dogs: 2, cricketMs: 750,
+    cans: 4, stumps: 3, crickets: 3, skunks:2, cricketMs: 750,
     win: 0.90,
   },
 ];
@@ -126,7 +126,7 @@ const SFX = {
   levelDone() { this._seq([523, 659, 784, 1047], 0.28, 140, 'sine'); },
   gameOver()  { this._seq([350, 250, 160, 90],   0.36, 180, 'sawtooth'); },
   sputter()   { this._seq([120, 100, 80, 60],    0.3,  120, 'sawtooth'); },
-  bark()      { this._beep(200, 0.12, 'square'); },
+  spray()     { this._seq([520, 440, 360, 280], 0.06, 30, 'sawtooth'); },
 
   combo(n) {
     const tier = n >= 10 ? [784, 1047, 1319] : n >= 5 ? [659, 784, 1047] : [523, 659, 784];
@@ -183,6 +183,9 @@ class MenuScene extends Phaser.Scene {
   constructor() { super({ key: 'Menu' }); }
 
   create() {
+    window._activeGameScene = null;
+    if (window._resetMobileControls) window._resetMobileControls();
+    if (window._positionMobileControls) window._positionMobileControls();
     window._totalScore = 0;
     if (window._mobileSetBar) window._mobileSetBar('');
     const _ms = document.getElementById('mobile-hud-strip');
@@ -344,11 +347,12 @@ class GameScene extends Phaser.Scene {
     this.cans     = [];
     this.stumps   = [];
     this.crickets = [];
-    this.dogs     = [];
+    this.skunks   = [];
+    this.poops    = [];
     this._placeCans();
     this._placeStumps();
     this._placeCrickets();
-    this._placeDogs();
+    this._placeSkunks();
 
     let _mow = 0;
     for (let _gy = 0; _gy < GRID_H; _gy++)
@@ -385,9 +389,10 @@ class GameScene extends Phaser.Scene {
     this.spKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
 
     // ── Touch input ─────────────────────────────────────────────
-    this._touch = { active: false, startX: 0, startY: 0, dx: 0, dy: 0, digging: false };
+    this._touch = { active: false, startX: 0, startY: 0, dx: 0, dy: 0, digging: false, throttle: false };
     this._buildJoystick();
     window._activeGameScene = this;
+    if (window._positionMobileControls) window._positionMobileControls();
   }
 
   // ── update ──────────────────────────────────────────────────────
@@ -430,8 +435,9 @@ class GameScene extends Phaser.Scene {
     this._checkStumps(delta);
     this._checkCrickets();
     this._moveCrickets(time);
-    this._moveDogs(delta);
-    this._checkDogs();
+    this._moveSkunks(delta);
+    this._checkSkunks();
+    this._checkPoo();
     this._exhaust(delta);
     this._updateMowerFace(delta);
     this._updateHUD();
@@ -451,7 +457,7 @@ class GameScene extends Phaser.Scene {
     if (this.cur.up.isDown    || this.wasd.up.isDown)    dy = -1;
     if (this.cur.down.isDown  || this.wasd.down.isDown)  dy =  1;
     // Touch/joystick override
-    if (this._touch.active && (Math.abs(this._touch.dx) > 8 || Math.abs(this._touch.dy) > 8)) {
+    if (this._touch.active && (Math.abs(this._touch.dx) > 0.01 || Math.abs(this._touch.dy) > 0.01)) {
       const td = Math.sqrt(this._touch.dx ** 2 + this._touch.dy ** 2);
       dx = this._touch.dx / td;
       dy = this._touch.dy / td;
@@ -759,80 +765,138 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-  // ── dog AI ──────────────────────────────────────────────────────
-  _moveDogs(delta) {
-    if (!this.cfg.dogs) return;
+  // ── skunk AI ─────────────────────────────────────────────────────
+  _moveSkunks(delta) {
+    if (!this.cfg.skunks) return;
     const dt = delta / 1000;
 
-    for (const dog of this.dogs) {
-      if (dog.scattered) continue;
-      const dx   = this.mx - dog.gfx.x;
-      const dy   = this.my - dog.gfx.y;
+    for (const skunk of this.skunks) {
+      if (skunk.scattered) continue;
+      const dx   = this.mx - skunk.gfx.x;
+      const dy   = this.my - skunk.gfx.y;
       const dist = Math.sqrt(dx * dx + dy * dy) || 1;
 
       if (dist / TILE < 4) {
-        // Chase player
-        const nx = dog.gfx.x + (dx / dist) * 80 * dt;
-        const ny = dog.gfx.y + (dy / dist) * 80 * dt;
-        dog.gfx.x = Phaser.Math.Clamp(nx, TILE, LAWN_W - TILE);
-        dog.gfx.y = Phaser.Math.Clamp(ny, LAWN_Y + TILE, LAWN_Y + LAWN_H - TILE);
-        dog.gfx.rotation = Math.atan2(dy, dx);
-        dog.chasing = true;
+        const nx = skunk.gfx.x + (dx / dist) * 60 * dt;
+        const ny = skunk.gfx.y + (dy / dist) * 60 * dt;
+        skunk.gfx.x = Phaser.Math.Clamp(nx, TILE, LAWN_W - TILE);
+        skunk.gfx.y = Phaser.Math.Clamp(ny, LAWN_Y + TILE, LAWN_Y + LAWN_H - TILE);
+        skunk.gfx.rotation = Math.atan2(dy, dx);
+        skunk.chasing = true;
       } else {
-        dog.chasing = false;
-        dog.wanderT = (dog.wanderT || 0) + delta;
-        if (dog.wanderT > 1800) {
-          dog.wanderT  = 0;
-          dog.wanderDx = Phaser.Math.Between(-1, 1);
-          dog.wanderDy = Phaser.Math.Between(-1, 1);
+        skunk.chasing = false;
+        skunk.wanderT = (skunk.wanderT || 0) + delta;
+        skunk.pooT    = (skunk.pooT    || 0) + delta;
+        if (skunk.wanderT > 1800) {
+          skunk.wanderT  = 0;
+          skunk.wanderDx = Phaser.Math.Between(-1, 1);
+          skunk.wanderDy = Phaser.Math.Between(-1, 1);
         }
-        const nx = dog.gfx.x + (dog.wanderDx || 0) * 30 * dt;
-        const ny = dog.gfx.y + (dog.wanderDy || 0) * 30 * dt;
-        dog.gfx.x = Phaser.Math.Clamp(nx, TILE, LAWN_W - TILE);
-        dog.gfx.y = Phaser.Math.Clamp(ny, LAWN_Y + TILE, LAWN_Y + LAWN_H - TILE);
+        const nx = skunk.gfx.x + (skunk.wanderDx || 0) * 30 * dt;
+        const ny = skunk.gfx.y + (skunk.wanderDy || 0) * 30 * dt;
+        skunk.gfx.x = Phaser.Math.Clamp(nx, TILE, LAWN_W - TILE);
+        skunk.gfx.y = Phaser.Math.Clamp(ny, LAWN_Y + TILE, LAWN_Y + LAWN_H - TILE);
+        if (skunk.pooT > 3200) {
+          skunk.pooT = 0;
+          this._dropPoo(skunk.gfx.x, skunk.gfx.y);
+        }
       }
     }
   }
 
-  _checkDogs() {
-    if (!this.cfg.dogs) return;
-    for (const dog of this.dogs) {
-      if (dog.scattered) continue;
-      const d = Phaser.Math.Distance.Between(this.mx, this.my, dog.gfx.x, dog.gfx.y);
-      if (d < TILE * 0.9) this._dogScatter(dog);
+  _checkSkunks() {
+    if (!this.cfg.skunks) return;
+    for (const skunk of this.skunks) {
+      if (skunk.scattered) continue;
+      const d = Phaser.Math.Distance.Between(this.mx, this.my, skunk.gfx.x, skunk.gfx.y);
+      if (d < TILE * 0.9) this._skunkSpray(skunk);
     }
   }
 
-  _dogScatter(dog) {
-    dog.scattered = true;
-    SFX.bark();
+  _skunkSpray(skunk) {
+    skunk.scattered = true;
+    SFX.spray();
     this._shake(0.008, 300);
 
-    this.flashRect.setFillStyle(0xff8800);
-    this.flashRect.setAlpha(0.3);
+    this.flashRect.setFillStyle(0x44aa00);
+    this.flashRect.setAlpha(0.4);
     this.tweens.add({
-      targets: this.flashRect, alpha: 0, duration: 400,
+      targets: this.flashRect, alpha: 0, duration: 500,
       onComplete: () => this.flashRect.setFillStyle(0xff0000),
     });
 
-    // Knock mower back 30px away from dog
-    const dx   = this.mx - dog.gfx.x;
-    const dy   = this.my - dog.gfx.y;
+    // Knock mower back 30px away from skunk
+    const dx   = this.mx - skunk.gfx.x;
+    const dy   = this.my - skunk.gfx.y;
     const dist = Math.sqrt(dx * dx + dy * dy) || 1;
     this.mx = Phaser.Math.Clamp(this.mx + (dx / dist) * 30, 18, LAWN_W - 18);
     this.my = Phaser.Math.Clamp(this.my + (dy / dist) * 30, LAWN_Y + 18, LAWN_Y + LAWN_H - 18);
     this.mowerCont.x = this.mx;
     this.mowerCont.y = this.my;
 
-    this._floatText(dog.gfx.x, dog.gfx.y, 'WOOF!', '#ff8800', 22);
+    // Spray stink particles
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      const p = this.add.circle(
+        skunk.gfx.x + Math.cos(a) * 8, skunk.gfx.y + Math.sin(a) * 8, 5, 0x88cc00, 0.8,
+      ).setDepth(30);
+      this.tweens.add({
+        targets: p, x: skunk.gfx.x + Math.cos(a) * 40, y: skunk.gfx.y + Math.sin(a) * 40,
+        alpha: 0, scaleX: 2.5, scaleY: 2.5, duration: 600,
+        onComplete: () => p.destroy(),
+      });
+    }
+
+    this._floatText(skunk.gfx.x, skunk.gfx.y, 'PFFFT!', '#88ff00', 22);
     this._setFaceState('xeyes', 700);
 
-    // Dog trots off
-    const exitX = dog.gfx.x < CW / 2 ? -80 : CW + 80;
+    // Drop poo behind before waddling off
+    this._dropPoo(skunk.gfx.x, skunk.gfx.y);
+
+    const exitX = skunk.gfx.x < CW / 2 ? -80 : CW + 80;
     this.tweens.add({
-      targets: dog.gfx, x: exitX, duration: 1200, ease: 'Quad.easeIn',
-      onComplete: () => dog.gfx.setVisible(false),
+      targets: skunk.gfx, x: exitX, duration: 1800, ease: 'Quad.easeIn',
+      onComplete: () => skunk.gfx.setVisible(false),
     });
+  }
+
+  // ── poo drop & collision ─────────────────────────────────────────
+  _dropPoo(wx, wy) {
+    const g = this.add.graphics().setDepth(3);
+    _drawPoo(g);
+    g.x = wx; g.y = wy;
+    // Wiggle in
+    this.tweens.add({ targets: g, scaleX: 1.3, scaleY: 0.7, duration: 120, yoyo: true });
+    this.poops.push({ gfx: g, wx, wy });
+  }
+
+  _checkPoo() {
+    if (!this.poops.length) return;
+    for (const p of this.poops) {
+      if (p.stepped) continue;
+      const d = Phaser.Math.Distance.Between(this.mx, this.my, p.wx, p.wy);
+      if (d < TILE * 0.6) this._stepInPoo(p);
+    }
+  }
+
+  _stepInPoo(p) {
+    p.stepped = true;
+    SFX.splat();
+    this._shake(0.01, 400);
+
+    this.flashRect.setFillStyle(0x4a2200);
+    this.flashRect.setAlpha(0.55);
+    this.tweens.add({ targets: this.flashRect, alpha: 0, duration: 600 });
+
+    this._floatText(p.wx, p.wy, 'FERTILIZER SHOWER!', '#cc6600', 20);
+    this._setFaceState('xeyes', 2000);
+
+    this.state = 'over';
+    SFX.stopMow();
+    SFX.gameOver();
+    this.time.delayedCall(1200, () =>
+      this.scene.start('GameOver', { level: this.lvlNum, reason: 'poo' }),
+    );
   }
 
   // ── exhaust puffs ────────────────────────────────────────────────
@@ -947,16 +1011,19 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-  _placeDogs() {
-    if (!this.cfg.dogs) return;
-    for (let i = 0; i < this.cfg.dogs; i++) {
+  _placeSkunks() {
+    if (!this.cfg.skunks) return;
+    for (let i = 0; i < this.cfg.skunks; i++) {
       const { tx, ty } = this._freeCell(8);
       const wx = tx * TILE + TILE / 2;
       const wy = LAWN_Y + ty * TILE + TILE / 2;
       const g  = this.add.graphics().setDepth(5);
-      _drawDog(g);
+      _drawSkunk(g);
       g.x = wx; g.y = wy;
-      this.dogs.push({ gfx: g, tx, ty, scattered: false, chasing: false, wanderT: 0, wanderDx: 0, wanderDy: 0 });
+      this.skunks.push({
+        gfx: g, tx, ty, scattered: false, chasing: false,
+        wanderT: 0, wanderDx: 0, wanderDy: 0, pooT: Phaser.Math.Between(0, 1600),
+      });
     }
   }
 
@@ -1346,10 +1413,10 @@ class GameScene extends Phaser.Scene {
 
     // Row 2 ── controls hint
     const isMobile = window.matchMedia('(hover: none) and (pointer: coarse)').matches;
-    let ctrlTxt = isMobile ? 'DRAG LEFT: mow' : 'WASD / ARROWS: mow';
+    let ctrlTxt = isMobile ? 'ARROWS / GO: mow' : 'WASD / ARROWS: mow';
     if (this.cfg.stumps   > 0) ctrlTxt += isMobile ? '   HOLD DIG: dig stumps' : '   HOLD SPACE: dig stumps';
     if (this.cfg.crickets > 0) ctrlTxt += '   ⚠ AVOID CRICKETS (-30 gas)';
-    if (this.cfg.dogs     > 0) ctrlTxt += '   ⚠ AVOID DOG';
+    if (this.cfg.skunks     > 0) ctrlTxt += '   ⚠ AVOID SKUNK & POO';
     this.add.text(CW / 2, HUD_Y + 42, ctrlTxt, {
       fontSize: '11px', fill: '#556655', fontFamily: 'Courier New',
     }).setOrigin(0.5, 0.5).setDepth(21);
@@ -1398,11 +1465,12 @@ class GameScene extends Phaser.Scene {
     }
     x += 4;
 
-    for (let i = 0; i < this.cfg.dogs; i++) {
+    for (let i = 0; i < this.cfg.skunks; i++) {
       const g = this.add.graphics().setDepth(22);
-      g.fillStyle(C_DOG); g.fillEllipse(x + 8, y + 1, 18, 11);
-      g.fillCircle(x + 17, y - 3, 7);
-      this.iconRow.push({ gfx: g, type: 'dog', index: i });
+      g.fillStyle(0x111111); g.fillEllipse(x + 8, y + 1, 18, 11);
+      g.fillStyle(0xffffff); g.fillRect(x + 2, y - 1, 11, 4); // white stripe
+      g.fillStyle(0x111111); g.fillCircle(x + 16, y - 3, 6);
+      this.iconRow.push({ gfx: g, type: 'skunk', index: i });
       x += 24;
     }
   }
@@ -1414,7 +1482,7 @@ class GameScene extends Phaser.Scene {
       if (ic.type === 'can')     used = !!this.cans[ic.index]?.dead;
       if (ic.type === 'stump')   used = !!this.stumps[ic.index]?.dug;
       if (ic.type === 'cricket') used = !!this.crickets[ic.index]?.splatted;
-      if (ic.type === 'dog')     used = !!this.dogs[ic.index]?.scattered;
+      if (ic.type === 'skunk')   used = !!this.skunks[ic.index]?.scattered;
       ic.gfx.setAlpha(used ? 0.2 : 1.0);
     }
   }
@@ -1478,6 +1546,9 @@ class LevelCompleteScene extends Phaser.Scene {
   init(data) { this.lvl = data.level; this.lvlScore = data.score || 0; }
 
   create() {
+    window._activeGameScene = null;
+    if (window._resetMobileControls) window._resetMobileControls();
+    if (window._positionMobileControls) window._positionMobileControls();
     this.add.rectangle(CW / 2, CH / 2, CW, CH, 0x081808);
 
     for (let i = 0; i < 50; i++) {
@@ -1543,10 +1614,13 @@ class LevelCompleteScene extends Phaser.Scene {
 class GameOverScene extends Phaser.Scene {
   constructor() { super({ key: 'GameOver' }); }
 
-  init(data) { this.lvl = data.level; }
+  init(data) { this.lvl = data.level; this.reason = data.reason || 'gas'; }
 
   create() {
-    this.add.rectangle(CW / 2, CH / 2, CW, CH, 0x1a0000);
+    window._activeGameScene = null;
+    if (window._resetMobileControls) window._resetMobileControls();
+    if (window._positionMobileControls) window._positionMobileControls();
+    this.add.rectangle(CW / 2, CH / 2, CW, CH, this.reason === 'poo' ? 0x1a0e00 : 0x1a0000);
 
     const g = this.add.graphics();
     g.fillStyle(0x888888); g.fillRect(CW / 2 - 22, 200, 44, 30);
@@ -1561,8 +1635,10 @@ class GameOverScene extends Phaser.Scene {
     g.strokeCircle(CW / 2, 186, 6);
     g.strokeCircle(CW / 2, 176, 4);
 
-    this.add.text(CW / 2, 130, 'OUT OF GAS!', {
-      fontSize: '54px', fill: '#ff3333', fontFamily: 'Courier New',
+    const headline = this.reason === 'poo' ? 'FERTILIZER SHOWER!' : 'OUT OF GAS!';
+    const headColor = this.reason === 'poo' ? '#cc6600' : '#ff3333';
+    this.add.text(CW / 2, 130, headline, {
+      fontSize: '54px', fill: headColor, fontFamily: 'Courier New',
       fontStyle: 'bold', stroke: '#000', strokeThickness: 8,
     }).setOrigin(0.5);
 
@@ -1577,6 +1653,7 @@ class GameOverScene extends Phaser.Scene {
     retry.on('pointerover', () => retry.setStyle({ fill: '#333' }));
     retry.on('pointerdown', () => this.scene.start('Game', { level: this.lvl }));
     this.input.keyboard.on('keydown-ENTER', () => this.scene.start('Game', { level: this.lvl }));
+    this.input.keyboard.on('keydown-R',     () => this.scene.start('Game', { level: this.lvl }));
 
     this.add.text(CW / 2, 440, 'BACK TO MENU', {
       fontSize: '16px', fill: '#555', fontFamily: 'Courier New',
@@ -1594,6 +1671,9 @@ class WinScene extends Phaser.Scene {
   init(data) { this.replayUnlocked = data.replayUnlocked || false; }
 
   create() {
+    window._activeGameScene = null;
+    if (window._resetMobileControls) window._resetMobileControls();
+    if (window._positionMobileControls) window._positionMobileControls();
     SFX.levelDone();
 
     const bg = this.add.graphics();
@@ -1623,7 +1703,7 @@ class WinScene extends Phaser.Scene {
       fontSize: '28px', fill: '#ffffff', fontFamily: 'Courier New', fontStyle: 'bold',
     }).setOrigin(0.5);
 
-    this.add.text(CW / 2, 212, 'STUMPS REMOVED. CRICKETS DODGED. DOG OUTWITTED.', {
+    this.add.text(CW / 2, 212, 'STUMPS REMOVED. CRICKETS DODGED. SKUNK OUTSTUNK.', {
       fontSize: '14px', fill: '#8bc44a', fontFamily: 'Courier New',
     }).setOrigin(0.5);
 
@@ -1719,32 +1799,53 @@ function _drawCricket(g) {
   g.beginPath(); g.moveTo(-8, 2); g.lineTo(-18, -6); g.lineTo(-12, 14); g.strokePath();
 }
 
-function _drawDog(g) {
+function _drawSkunk(g) {
   // Shadow
   g.fillStyle(0x000000, 0.15); g.fillEllipse(1, 11, 34, 8);
-  // Body
-  g.fillStyle(C_DOG);          g.fillEllipse(0, 0, 32, 18);
-  g.lineStyle(2, 0x8a6030);    g.strokeEllipse(0, 0, 32, 18);
-  // Head
-  g.fillStyle(C_DOG);          g.fillCircle(14, -4, 10);
-  g.lineStyle(2, 0x8a6030);    g.strokeCircle(14, -4, 10);
-  // Floppy ear
-  g.fillStyle(0xa07040);
-  g.fillTriangle(8, -12, 3, -22, 14, -16);
-  g.lineStyle(1, 0x7a5020);
-  g.beginPath(); g.moveTo(8, -12); g.lineTo(3, -22); g.lineTo(14, -16); g.strokePath();
-  // Eye
+  // Body (black)
+  g.fillStyle(0x111111); g.fillEllipse(0, 0, 32, 18);
+  g.lineStyle(2, 0x444444); g.strokeEllipse(0, 0, 32, 18);
+  // White stripe down body
+  g.fillStyle(0xffffff); g.fillRect(-12, -3, 22, 6);
+  // Head (black)
+  g.fillStyle(0x111111); g.fillCircle(14, -4, 10);
+  g.lineStyle(2, 0x444444); g.strokeCircle(14, -4, 10);
+  // White head blaze
+  g.fillStyle(0xffffff); g.fillRect(9, -8, 6, 7);
+  // Beady eye
   g.fillStyle(0x000000); g.fillCircle(18, -6, 2.5);
   g.fillStyle(0xffffff); g.fillCircle(19, -7, 1);
-  // Nose
-  g.fillStyle(0x3a1a00); g.fillCircle(22, -2, 2.5);
-  // Tail
-  g.lineStyle(4, C_DOG);
-  g.beginPath(); g.moveTo(-14, -2); g.lineTo(-22, -10); g.strokePath();
-  // Legs
-  g.lineStyle(4, C_DOG);
-  [[-8, 8, -8, 18], [0, 9, 0, 19], [6, 8, 6, 18], [12, 7, 12, 17]]
+  // Pink nose
+  g.fillStyle(0xffaaaa); g.fillCircle(22, -2, 2.5);
+  // Bushy white tail raised high
+  g.fillStyle(0xffffff);
+  g.fillTriangle(-13, -3, -26, -20, -18, 3);
+  g.lineStyle(1, 0xcccccc, 0.6);
+  g.beginPath(); g.moveTo(-13, -3); g.lineTo(-26, -20); g.lineTo(-18, 3); g.strokePath();
+  // Black stripe on tail
+  g.fillStyle(0x111111);
+  g.fillTriangle(-22, -15, -26, -20, -19, -17);
+  // Legs (stubby)
+  g.lineStyle(4, 0x111111);
+  [[-8, 8, -8, 17], [0, 9, 0, 18], [6, 8, 6, 17], [12, 7, 12, 16]]
     .forEach(([x1, y1, x2, y2]) => { g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.strokePath(); });
+}
+
+function _drawPoo(g) {
+  // Base blob
+  g.fillStyle(0x3a1800); g.fillEllipse(0, 4, 18, 10);
+  // Middle lump
+  g.fillStyle(0x4a2200); g.fillCircle(0, -2, 7);
+  // Top lump
+  g.fillStyle(0x3a1800); g.fillCircle(1, -9, 5);
+  // Tip
+  g.fillStyle(0x4a2200); g.fillCircle(0, -14, 3);
+  // Sheen
+  g.fillStyle(0xffffff, 0.15); g.fillCircle(-2, -3, 2);
+  // Outline
+  g.lineStyle(1, 0x1a0800, 0.6);
+  g.strokeEllipse(0, 4, 18, 10);
+  g.strokeCircle(0, -2, 7);
 }
 
 // ═══════════════════════════════════════════════════════════════════

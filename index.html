@@ -87,41 +87,92 @@
     .overlay-note { margin-top: 24px; font-size: 11px; color: #444; text-align: center; }
 
     /* ── Mobile controls ─────────────────────────── */
-    #ctrl-joy, #ctrl-dig {
+    #ctrl-dir, #ctrl-actions {
       display: none;
       position: fixed;
       z-index: 500;
       touch-action: none;
-      border-radius: 18px;
-      border: 1.5px solid rgba(255,255,255,0.13);
-      background: rgba(255,255,255,0.04);
+      -webkit-user-select: none; user-select: none;
+    }
+    #ctrl-dir {
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: repeat(3, 1fr);
+      gap: 6px;
+      padding: 8px;
+      border-radius: 8px;
+      border: 1.5px solid rgba(255,255,255,0.14);
+      background: rgba(0,0,0,0.38);
+    }
+    #ctrl-actions {
+      flex-direction: column;
+      gap: 10px;
+    }
+    .ctrl-key, .ctrl-action {
+      appearance: none;
+      -webkit-appearance: none;
+      border: 1.5px solid rgba(255,255,255,0.18);
+      background: rgba(255,255,255,0.08);
+      color: rgba(255,255,255,0.82);
+      font-family: 'Courier New', monospace;
+      font-weight: bold;
+      line-height: 1;
+      touch-action: none;
+      -webkit-user-select: none; user-select: none;
+    }
+    .ctrl-key {
+      border-radius: 8px;
+      font-size: 25px;
+      min-width: 0;
+      min-height: 0;
+    }
+    .ctrl-key[data-dir="0,-1"] { grid-column: 2; grid-row: 1; }
+    .ctrl-key[data-dir="-1,0"] { grid-column: 1; grid-row: 2; }
+    .ctrl-key[data-dir="1,0"]  { grid-column: 3; grid-row: 2; }
+    .ctrl-key[data-dir="0,1"]  { grid-column: 2; grid-row: 3; }
+    .ctrl-key.active {
+      background: rgba(255,255,255,0.20);
+      border-color: rgba(255,255,255,0.62);
+      color: #ffffff;
+    }
+    .ctrl-action {
+      display: flex;
       align-items: center;
       justify-content: center;
       flex-direction: column;
-      gap: 8px;
-      -webkit-user-select: none; user-select: none;
+      gap: 5px;
+      border-radius: 8px;
+      font-size: 28px;
     }
-    #ctrl-joy.active { background: rgba(255,255,255,0.08); }
-    #ctrl-dig { border-color: rgba(255,204,0,0.25); background: rgba(255,204,0,0.04); }
-    #ctrl-dig.active { background: rgba(255,204,0,0.18); border-color: rgba(255,204,0,0.75); }
-    .ctrl-label {
-      font-family: 'Courier New', monospace; font-size: 12px; font-weight: bold;
-      pointer-events: none; letter-spacing: 1px;
+    .ctrl-action small {
+      font-size: 11px;
+      letter-spacing: 1px;
+      pointer-events: none;
     }
-    #ctrl-joy .ctrl-label { color: rgba(255,255,255,0.25); }
-    #ctrl-dig .ctrl-label { color: rgba(255,204,0,0.45); font-size: 16px; }
-    #joy-ring {
-      width: 80px; height: 80px; border-radius: 50%;
-      border: 2.5px solid rgba(255,255,255,0.55);
-      position: absolute; pointer-events: none;
-      transform: translate(-50%,-50%); display: none;
+    #ctrl-throttle {
+      background: rgba(69,176,69,0.14);
+      border-color: rgba(139,196,74,0.42);
+      color: #8bc44a;
     }
-    #joy-knob {
-      width: 38px; height: 38px; border-radius: 50%;
-      background: rgba(255,255,255,0.22);
-      border: 2px solid rgba(255,255,255,0.5);
-      position: absolute; pointer-events: none;
-      transform: translate(-50%,-50%); display: none;
+    #ctrl-throttle.active {
+      background: rgba(69,176,69,0.30);
+      border-color: rgba(139,196,74,0.95);
+      color: #ffffff;
+    }
+    #ctrl-dig {
+      background: rgba(255,204,0,0.08);
+      border-color: rgba(255,204,0,0.28);
+      color: #ffcc00;
+    }
+    #ctrl-dig.active {
+      background: rgba(255,204,0,0.22);
+      border-color: rgba(255,204,0,0.82);
+    }
+    @media (pointer: coarse) {
+      #back-btn {
+        top: max(10px, env(safe-area-inset-top));
+        right: max(10px, env(safe-area-inset-right));
+        bottom: auto !important;
+      }
     }
   </style>
 </head>
@@ -155,8 +206,20 @@
     <span><span class="mhud-lbl">SCORE </span><span style="color:#fff" id="mhud-score">0</span></span>
   </div>
   <!-- Mobile controls -->
-  <div id="ctrl-joy"><span class="ctrl-label">MOVE</span><div id="joy-ring"></div><div id="joy-knob"></div></div>
-  <div id="ctrl-dig"><span class="ctrl-label">DIG</span></div>
+  <div id="ctrl-dir" aria-label="Direction controls">
+    <button class="ctrl-key" data-dir="0,-1" aria-label="Up">&uarr;</button>
+    <button class="ctrl-key" data-dir="-1,0" aria-label="Left">&larr;</button>
+    <button class="ctrl-key" data-dir="1,0" aria-label="Right">&rarr;</button>
+    <button class="ctrl-key" data-dir="0,1" aria-label="Down">&darr;</button>
+  </div>
+  <div id="ctrl-actions" aria-label="Action controls">
+    <button id="ctrl-throttle" class="ctrl-action" aria-label="Throttle">
+      &#9650;<small>GO</small>
+    </button>
+    <button id="ctrl-dig" class="ctrl-action" aria-label="Dig">
+      &#9670;<small>DIG</small>
+    </button>
+  </div>
 
   <div id="game-container"></div>
 
@@ -219,23 +282,33 @@
     }
 
     function _hideControls() {
-      document.getElementById('ctrl-joy').style.display = 'none';
+      document.getElementById('ctrl-dir').style.display = 'none';
+      document.getElementById('ctrl-actions').style.display = 'none';
       document.getElementById('ctrl-dig').style.display = 'none';
     }
 
     function _positionControls() {
       if (!_isMobile) return;
+      const scene = window._activeGameScene;
+      if (!scene) { _hideControls(); return; }
       const portrait = window.innerHeight > window.innerWidth;
-      const joy = document.getElementById('ctrl-joy');
+      const dir = document.getElementById('ctrl-dir');
+      const actions = document.getElementById('ctrl-actions');
+      const throttle = document.getElementById('ctrl-throttle');
       const dig = document.getElementById('ctrl-dig');
-      const hasStumps = window._activeGameScene?.cfg?.stumps > 0;
+      const hasStumps = scene.cfg?.stumps > 0;
 
       if (portrait) {
-        const PAD  = 20;
-        const SIZE = 130;
-        joy.style.cssText = `display:flex;left:${PAD}px;bottom:${PAD}px;width:${SIZE}px;height:${SIZE}px;border-radius:50%;`;
+        const PAD = 14;
+        const safeBottom = 'max(14px, env(safe-area-inset-bottom))';
+        const dirSize = Math.min(152, Math.floor(window.innerWidth * 0.42));
+        const actionW = Math.min(138, Math.floor(window.innerWidth * 0.36));
+        dir.style.cssText = `display:grid;left:${PAD}px;bottom:${safeBottom};width:${dirSize}px;height:${dirSize}px;`;
+        actions.style.cssText = `display:flex;right:${PAD}px;bottom:${safeBottom};width:${actionW}px;`;
+        throttle.style.cssText = `height:${hasStumps ? 86 : 116}px;`;
         if (hasStumps) {
-          dig.style.cssText = `display:flex;right:${PAD}px;bottom:${PAD}px;width:${SIZE}px;height:${SIZE}px;border-radius:50%;`;
+          dig.style.display = 'flex';
+          dig.style.height = '58px';
         } else {
           dig.style.display = 'none';
         }
@@ -262,81 +335,120 @@
       const zoneH  = vh - PAD * 2;
 
       if (leftW < 40) { _hideControls(); return; }
-      joy.style.cssText = `display:flex;left:${PAD}px;top:${PAD}px;width:${leftW}px;height:${zoneH}px;`;
-      if (hasStumps && rightW >= 40) {
-        dig.style.cssText = `display:flex;right:${PAD}px;top:${PAD}px;width:${rightW}px;height:${zoneH}px;`;
+      const dirSize = Math.min(leftW, zoneH, 152);
+      dir.style.cssText = `display:grid;left:${PAD}px;top:${Math.round((vh - dirSize) / 2)}px;width:${dirSize}px;height:${dirSize}px;`;
+      if (rightW >= 40) {
+        const actionW = Math.max(48, rightW);
+        actions.style.cssText = `display:flex;right:${PAD}px;top:${PAD}px;width:${actionW}px;height:${zoneH}px;justify-content:center;`;
+        throttle.style.cssText = `height:${hasStumps ? Math.max(76, Math.floor(zoneH * 0.52)) : Math.max(104, Math.floor(zoneH * 0.74))}px;`;
+        if (hasStumps) {
+          dig.style.display = 'flex';
+          dig.style.height = Math.max(58, Math.floor(zoneH * 0.24)) + 'px';
+        } else {
+          dig.style.display = 'none';
+        }
       } else {
-        dig.style.display = 'none';
+        actions.style.display = 'none';
       }
     }
+    window._positionMobileControls = _positionControls;
 
     window.addEventListener('resize', _checkOrientation);
     window.addEventListener('load', () => setTimeout(_checkOrientation, 600));
     setInterval(() => { if (_isMobile) _positionControls(); }, 1500);
 
-    // ── Joystick touch handling ───────────────────────────────────
-    const joy    = document.getElementById('ctrl-joy');
-    const ring   = document.getElementById('joy-ring');
-    const knob   = document.getElementById('joy-knob');
-    let joyOx = 0, joyOy = 0, joyId = -1;
-
+    // ── Throttle + D-pad handling ─────────────────────────────────
+    const dirButtons = Array.from(document.querySelectorAll('.ctrl-key'));
+    const throttle = document.getElementById('ctrl-throttle');
+    const dig = document.getElementById('ctrl-dig');
+    const activeDirs = new Map();
+    let throttleDown = false;
+    let lastDir = { x: 0, y: -1 };
     function _scene() { return window._activeGameScene; }
 
-    joy.addEventListener('touchstart', e => {
-      e.preventDefault();
-      const t = e.changedTouches[0];
-      const r = joy.getBoundingClientRect();
-      joyId = t.identifier;
-      joyOx = t.clientX - r.left;
-      joyOy = t.clientY - r.top;
-      joy.classList.add('active');
-      ring.style.cssText = `display:block;left:${joyOx}px;top:${joyOy}px;`;
-      knob.style.cssText = `display:block;left:${joyOx}px;top:${joyOy}px;`;
-      const s = _scene(); if (s) { s._touch.active = true; s._touch.dx = 0; s._touch.dy = 0; }
-    }, { passive: false });
-
-    joy.addEventListener('touchmove', e => {
-      e.preventDefault();
-      for (const t of e.changedTouches) {
-        if (t.identifier !== joyId) continue;
-        const r   = joy.getBoundingClientRect();
-        const dx  = t.clientX - r.left - joyOx;
-        const dy  = t.clientY - r.top  - joyOy;
-        const d   = Math.sqrt(dx * dx + dy * dy);
-        const cap = 40;
-        const kx  = joyOx + (dx / (d || 1)) * Math.min(d, cap);
-        const ky  = joyOy + (dy / (d || 1)) * Math.min(d, cap);
-        knob.style.left = kx + 'px'; knob.style.top = ky + 'px';
-        const s = _scene();
-        if (s) { s._touch.dx = dx; s._touch.dy = dy; }
+    function _syncTouch() {
+      const s = _scene();
+      if (!s) return;
+      let dx = 0;
+      let dy = 0;
+      for (const v of activeDirs.values()) {
+        dx += v.x;
+        dy += v.y;
       }
-    }, { passive: false });
-
-    joy.addEventListener('touchend', e => {
-      e.preventDefault();
-      for (const t of e.changedTouches) {
-        if (t.identifier !== joyId) continue;
-        joyId = -1;
-        joy.classList.remove('active');
-        ring.style.display = 'none'; knob.style.display = 'none';
-        const s = _scene(); if (s) { s._touch.active = false; s._touch.dx = 0; s._touch.dy = 0; }
+      if (dx !== 0 || dy !== 0) {
+        lastDir = { x: Math.sign(dx), y: Math.sign(dy) };
+      } else if (throttleDown) {
+        dx = lastDir.x;
+        dy = lastDir.y;
       }
-    }, { passive: false });
+      s._touch.active = throttleDown || activeDirs.size > 0;
+      s._touch.throttle = throttleDown;
+      s._touch.dx = dx;
+      s._touch.dy = dy;
+    }
 
-    // ── DIG touch handling ────────────────────────────────────────
-    const dig = document.getElementById('ctrl-dig');
+    function _bindHold(el, onDown, onUp) {
+      const release = e => {
+        e.preventDefault();
+        onUp(e);
+        try { el.releasePointerCapture(e.pointerId); } catch (_) {}
+      };
+      el.addEventListener('pointerdown', e => {
+        e.preventDefault();
+        try { el.setPointerCapture(e.pointerId); } catch (_) {}
+        onDown(e);
+      });
+      el.addEventListener('pointerup', release);
+      el.addEventListener('pointercancel', release);
+      el.addEventListener('lostpointercapture', e => onUp(e));
+    }
 
-    dig.addEventListener('touchstart', e => {
-      e.preventDefault();
+    window._resetMobileControls = () => {
+      activeDirs.clear();
+      throttleDown = false;
+      dirButtons.forEach(btn => btn.classList.remove('active'));
+      throttle.classList.remove('active');
+      dig.classList.remove('active');
+      const s = _scene();
+      if (s) {
+        s._touch.active = false;
+        s._touch.throttle = false;
+        s._touch.dx = 0;
+        s._touch.dy = 0;
+        s._touch.digging = false;
+      }
+    };
+
+    dirButtons.forEach(btn => {
+      const [x, y] = btn.dataset.dir.split(',').map(Number);
+      _bindHold(btn, e => {
+        activeDirs.set(e.pointerId, { x, y });
+        btn.classList.add('active');
+        _syncTouch();
+      }, e => {
+        activeDirs.delete(e.pointerId);
+        btn.classList.remove('active');
+        _syncTouch();
+      });
+    });
+
+    _bindHold(throttle, () => {
+      throttleDown = true;
+      throttle.classList.add('active');
+      _syncTouch();
+    }, () => {
+      throttleDown = false;
+      throttle.classList.remove('active');
+      _syncTouch();
+    });
+
+    _bindHold(dig, () => {
       dig.classList.add('active');
       const s = _scene(); if (s) s._touch.digging = true;
-    }, { passive: false });
-
-    dig.addEventListener('touchend', e => {
-      e.preventDefault();
+    }, () => {
       dig.classList.remove('active');
       const s = _scene(); if (s) s._touch.digging = false;
-    }, { passive: false });
+    });
 
   </script>
 
@@ -348,11 +460,26 @@
 
   <button id="back-btn" style="position:fixed;bottom:16px;right:16px;z-index:9999;padding:8px 18px;background:linear-gradient(135deg,#a855f7,#ec4899);color:#fff;border:none;border-radius:20px;font-size:12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-weight:700;letter-spacing:0.1em;cursor:pointer;box-shadow:0 4px 12px rgba(168,85,247,0.4);touch-action:manipulation;">&#8592; Back</button>
   <script>
-    document.getElementById('back-btn').addEventListener('touchend', function(e) {
+    document.getElementById('back-btn').addEventListener('pointerdown', function(e) {
       e.preventDefault();
+      e.stopPropagation();
       handleBack();
     });
-    document.getElementById('back-btn').addEventListener('click', handleBack);
+
+    // Shake to go back (same as back button)
+    if (window.DeviceMotionEvent) {
+      let _lastShake = 0;
+      window.addEventListener('devicemotion', function(e) {
+        const acc = e.accelerationIncludingGravity;
+        if (!acc) return;
+        const mag = Math.sqrt(acc.x * acc.x + acc.y * acc.y + acc.z * acc.z);
+        const now = Date.now();
+        if (mag > 20 && now - _lastShake > 1500) {
+          _lastShake = now;
+          handleBack();
+        }
+      });
+    }
   </script>
 </body>
 </html>
