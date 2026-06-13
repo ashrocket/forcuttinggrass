@@ -466,7 +466,7 @@ class GameScene extends Phaser.Scene {
     if (dx === 0 && dy === 0) {
       if (this.moving) { SFX.stopMow(); this.moving = false; }
       this.comboIdleMs += delta;
-      if (this.comboIdleMs > 400 && this.combo > 1) {
+      if (this.comboIdleMs > 750 && this.combo > 1) {
         this.combo = 1;
         this.lastComboTier = 0;
       }
@@ -672,7 +672,7 @@ class GameScene extends Phaser.Scene {
     SFX.pickup();
     this._floatText(s.wx, s.wy, 'STUMP GONE!', '#ffcc00', 20);
 
-    // Grant double-wide power-up
+    // Grant triple-wide power-up
     this.wideTimer = 10;
     this._floatText(this.mx, this.my - 40, 'TRIPLE WIDE! 10s', '#ff88ff', 22);
     this.tweens.add({
@@ -726,6 +726,32 @@ class GameScene extends Phaser.Scene {
         targets: cr.gfx, alpha: 0, duration: 500,
         onComplete: () => cr.gfx.destroy(),
       });
+    });
+
+    // Respawn so hazard pressure doesn't drain out of the level
+    this.time.delayedCall(7000, () => this._respawnCricket(cr));
+  }
+
+  _respawnCricket(cr) {
+    // _freeCell's distance check is from the grid center — also keep clear of the mower
+    let tx, ty;
+    const mtx = Math.floor(this.mx / TILE);
+    const mty = Math.floor((this.my - LAWN_Y) / TILE);
+    for (let i = 0; i < 10; i++) {
+      ({ tx, ty } = this._freeCell(5));
+      if (Math.abs(tx - mtx) + Math.abs(ty - mty) >= 4) break;
+    }
+    const wx = tx * TILE + TILE / 2;
+    const wy = LAWN_Y + ty * TILE + TILE / 2;
+    const g  = this.add.graphics().setDepth(5);
+    _drawCricket(g);
+    g.x = wx; g.y = wy;
+    g.setAlpha(0);
+    cr.gfx = g; cr.tx = tx; cr.ty = ty; cr.hopping = false;
+    this.tweens.add({
+      targets: g, alpha: 1, duration: 400,
+      // stays non-collidable until fully visible
+      onComplete: () => { cr.splatted = false; },
     });
   }
 
